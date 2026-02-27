@@ -1,8 +1,8 @@
 # rare-event-simulation-using-ai-weather-forecasting
 
-This repository contains the work from my Master’s thesis at LSCE (CNRS), supervised by Pascal Yiou and Soulivanh Thao. The project evaluates the viability of Artificial Intelligence Forecasting Systems (AIFS) for climate extremes.
+This repository contains the work from my Master’s thesis at LSCE (CNRS), supervised by Pascal Yiou and Soulivanh Thao. The project evaluates the viability of AIFS from ECMWF for climate extremes. Exploring whether AI-based weather forecasting models (AIFS) can replace traditional dynamical models for simulating extreme climate events. 
 
-This project explores whether AI-based weather forecasting models (AIFS) can replace traditional dynamical models for simulating extreme climate events. 
+This project 
 
 - The first part focuses on the models physical consistency and chaotic properties, assessing the ability of AIFS-Deterministic to be physically consistent and chaotic, looking at energy transfers and using ensemble boosting (perturbed initial conditions) to evaluate Lyapunov exponents and times.
 - The second part will aim at performing rare event algorithms using AIFS.
