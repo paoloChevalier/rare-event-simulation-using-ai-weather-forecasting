@@ -6,6 +6,7 @@ import cartopy.feature as cfeature
 import matplotlib.animation as animation
 from IPython.display import HTML
 
+
 def fix_lat_lon(data):
     """Tidy latitude and longitude data.
 
@@ -62,7 +63,7 @@ class EnsembleChaos:
         self.perturbed = fix_lat_lon(perturbed).sortby("step")
         self.var_name = var_name
         self.offset = 273.15 if var_name in ["t2m", "tas", "ts", "t2"] else 0.0
-    
+
     def plot_trajectories_on_single_point(self, lat, lon, times=[0, 6, 12, 18]):
         """Plot the trajectories for a control run and perturbed ensemble at a single grid point.
 
@@ -125,12 +126,19 @@ class EnsembleChaos:
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
         time_mask_perturbed = self.perturbed.valid_time.dt.hour.isin(times)
 
-        temp_control = self.control.sel(
-            latitude=lat, longitude=lon, step=time_mask_control
-        ).mean(dim=["latitude", "longitude"])
-        temp_perturbed = self.perturbed.sel(
-            latitude=lat, longitude=lon, step=time_mask_perturbed
-        ).mean(dim=["latitude", "longitude"])
+        weights = np.cos(np.deg2rad(self.control.latitude.sel(latitude=lat)))
+        weights.name = "weights"
+
+        temp_control = (
+            self.control.sel(latitude=lat, longitude=lon, step=time_mask_control)
+            .weighted(weights)
+            .mean(dim=["latitude", "longitude"])
+        )
+        temp_perturbed = (
+            self.perturbed.sel(latitude=lat, longitude=lon, step=time_mask_perturbed)
+            .weighted(weights)
+            .mean(dim=["latitude", "longitude"])
+        )
 
         temp_control[self.var_name] = temp_control[self.var_name] - self.offset
         temp_perturbed[self.var_name] = temp_perturbed[self.var_name] - self.offset
@@ -158,19 +166,19 @@ class EnsembleChaos:
     def lyapunov_single_point(self, lat, lon, times=[0, 6, 12, 18]):
         """Estimate the Lyapunov exponent at a single grid point.
 
-                    Computes the log-RMSE between each perturbed ensemble member and the control
+                            Computes the log-RMSE between each perturbed ensemble member and the control
         run at the nearest grid point, then fits a line to the initial linear growth
-                    region to estimate the Lyapunov exponent.
+                            region to estimate the Lyapunov exponent.
 
-                    Args:
-                        lat: Latitude of the point of interest. The nearest grid point will be selected.
-                        lon: Longitude of the point of interest. The nearest grid point will be selected.
-                        times: List of hours to filter the data by. Defaults to [12].
+                            Args:
+                                lat: Latitude of the point of interest. The nearest grid point will be selected.
+                                lon: Longitude of the point of interest. The nearest grid point will be selected.
+                                times: List of hours to filter the data by. Defaults to [12].
 
-                    Returns:
-                        None. Displays a matplotlib figure showing individual log-RMSE trajectories
-                        (blue), the ensemble mean (orange), and the linear fit (green dashed), and
-                        prints the estimated Lyapunov exponent in days^-1.
+                            Returns:
+                                None. Displays a matplotlib figure showing individual log-RMSE trajectories
+                                (blue), the ensemble mean (orange), and the linear fit (green dashed), and
+                                prints the estimated Lyapunov exponent in days^-1.
         """
         # mask to only compute on selected times for each day
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
@@ -273,7 +281,9 @@ class EnsembleChaos:
 
         # computation of logdist
         sq_diff = (temp_control - temp_perturbed) ** 2
-        rmse = np.sqrt(sq_diff.mean(dim=["latitude", "longitude"]))
+        weights = np.cos(np.deg2rad(sq_diff.latitude))  # weighting
+
+        rmse = np.sqrt(sq_diff.weighted(weights).mean(dim=["latitude", "longitude"]))
         logdist = np.log(rmse)
         mean_logdist = logdist.mean(dim="number")
         mean_logdist_np = mean_logdist.values
@@ -356,7 +366,17 @@ class EnsembleChaos:
             .values
         )
         sq_diff = (temp[:, None, :, :, :] - temp[None, :, :, :, :]) ** 2
-        rmse = np.sqrt(np.mean(sq_diff, axis=(-1, -2)))
+
+        mean_sq_lon = np.mean(sq_diff, axis=-1)  # mean over longitude cos not weighted
+        weights_lat = np.cos(
+            np.deg2rad(temp_control.latitude.values)
+        )  # weights for latitude
+        mean_sq_diff = np.average(
+            mean_sq_lon, axis=-1, weights=weights_lat
+        )  # weighted mean
+        rmse = np.sqrt(mean_sq_diff)
+
+        # rmse = np.sqrt(np.mean(sq_diff, axis=(-1, -2))) #old un weighted mean
         logdist = np.log(rmse[np.triu_indices(rmse.shape[0], k=1)])
         mean_logdist = np.mean(logdist, axis=0)
 
@@ -438,7 +458,7 @@ class EnsembleChaos:
             figsize=(10, 8), subplot_kw={"projection": ccrs.PlateCarree()}
         )
     
-        data.isel(step=0).plot.pcolormesh(
+        mesh=data.isel(step=0).plot.pcolormesh(
             ax=ax, levels=30, cmap="RdBu_r", vmin=vmin, vmax=vmax, add_colorbar=True
         )
     
@@ -446,23 +466,12 @@ class EnsembleChaos:
             [lon_bnds.start, lon_bnds.stop, lat_bnds.start, lat_bnds.stop],
             crs=ccrs.PlateCarree(),
         )
+        ax.coastlines()
     
         # Update loop
         def update(frame):
-            ax.clear()
-    
-            ax.coastlines()
-            ax.set_extent(
-                [lon_bnds.start, lon_bnds.stop, lat_bnds.start, lat_bnds.stop],
-                crs=ccrs.PlateCarree(),
-            )
-    
             step_data = data.isel(step=frame)
-    
-            step_data.plot.pcolormesh(
-                ax=ax, levels=30, cmap="RdBu_r", vmin=vmin, vmax=vmax, add_colorbar=False
-            )
-    
+            mesh.set_array(step_data.values.ravel())
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
             ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
     
@@ -505,8 +514,6 @@ class EnsembleChaos:
 
         data = data - self.offset
         
-        padding = 60
-    
         vmin, vmax = (
             data.sel(latitude=lat_bnds, longitude=lon_bnds).min().item(),
             data.sel(latitude=lat_bnds, longitude=lon_bnds).max().item(),
@@ -520,7 +527,7 @@ class EnsembleChaos:
             subplot_kw={"projection": ccrs.Orthographic(center_lon, center_lat)},
         )
     
-        data.isel(step=0).plot.pcolormesh(
+        mesh=data.isel(step=0).plot.pcolormesh(
             ax=ax,
             levels=30,
             cmap="RdBu_r",
@@ -529,7 +536,9 @@ class EnsembleChaos:
             add_colorbar=True,
             transform=ccrs.PlateCarree(),
         )
-    
+
+        ax.coastlines()
+        padding=30
         ax.set_extent(
             [
                 lon_bnds.start - padding,
@@ -538,37 +547,13 @@ class EnsembleChaos:
                 lat_bnds.stop + padding,
             ],
             crs=ccrs.PlateCarree(),
-        )
-    
+        )    
         # Update loop
         def update(frame):
-            ax.clear()
-    
-            ax.coastlines()
-            ax.set_extent(
-                [
-                    lon_bnds.start - padding,
-                    lon_bnds.stop + padding,
-                    lat_bnds.start - padding,
-                    lat_bnds.stop + padding,
-                ],
-                crs=ccrs.PlateCarree(),
-            )
-    
             step_data = data.isel(step=frame)
-    
-            step_data.plot.pcolormesh(
-                ax=ax,
-                levels=30,
-                cmap="RdBu_r",
-                vmin=vmin,
-                vmax=vmax,
-                add_colorbar=False,
-                transform=ccrs.PlateCarree(),
-            )
-    
+            mesh.set_array(step_data.values.ravel())
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
-            ax.set_title(f"Forecast Step: {frame} | Time: {time_str}")
+            ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
     
         ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=300)
     
