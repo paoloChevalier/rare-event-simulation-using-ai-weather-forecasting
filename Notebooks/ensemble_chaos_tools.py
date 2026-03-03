@@ -70,7 +70,7 @@ class EnsembleChaos:
         Args:
             lat: Latitude of the point of interest. The nearest grid point will be selected.
             lon: Longitude of the point of interest. The nearest grid point will be selected.
-            times: List of hours to filter the data by, if needed. Defaults to [12].
+            times: List of hours to filter the data by, if needed. Defaults to [0,6,12,18].
 
         Returns:
             None. Displays a matplotlib figure showing the ensemble spread (shaded area),
@@ -116,7 +116,7 @@ class EnsembleChaos:
         Args:
             lat: Slice or array of latitudes defining the region to average over.
             lon: Slice or array of longitudes defining the region to average over.
-            times: List of hours to filter the data by, if needed. Defaults to [12].
+            times: List of hours to filter the data by, if needed. Defaults to [0,6,12,18].
 
         Returns:
             None. Displays a matplotlib figure showing the ensemble spread (shaded area),
@@ -173,7 +173,7 @@ class EnsembleChaos:
                             Args:
                                 lat: Latitude of the point of interest. The nearest grid point will be selected.
                                 lon: Longitude of the point of interest. The nearest grid point will be selected.
-                                times: List of hours to filter the data by. Defaults to [12].
+                                times: List of hours to filter the data by. Defaults to [0,6,12,18].
 
                             Returns:
                                 None. Displays a matplotlib figure showing individual log-RMSE trajectories
@@ -253,7 +253,7 @@ class EnsembleChaos:
         Args:
             lat: Slice or array of latitudes defining the region to average over.
             lon: Slice or array of longitudes defining the region to average over.
-            times: List of hours to filter the data by. Defaults to [12].
+            times: List of hours to filter the data by. Defaults to [0,6,12,18].
 
         Returns:
             lyapunov_exponent: Estimated Lyapunov exponent in days^-1, rounded to 3
@@ -339,7 +339,7 @@ class EnsembleChaos:
         Args:
             lat: Slice or array of latitudes defining the region to average over.
             lon: Slice or array of longitudes defining the region to average over.
-            times: List of hours to filter the data by. Defaults to [12].
+            times: List of hours to filter the data by. Defaults to [0,6,12,18].
 
         Returns:
             lyapunov_exponent: Estimated Lyapunov exponent in days^-1, rounded to 3
@@ -430,15 +430,15 @@ class EnsembleChaos:
         across all frames.
     
         Args:
-            data: xarray DataArray with t2m temperature data and dimensions including
-                  step, latitude, and longitude, and a valid_time coordinate.
             lat_bnds: slice defining the latitude bounds of the region to display
                       and use for colorscale normalisation (e.g. slice(40, 60)).
             lon_bnds: slice defining the longitude bounds of the region to display
                       and use for colorscale normalisation (e.g. slice(-10, 20)).
+            member: ensemble member to choose (0=control)
+            filename: optional filename for saving the figure
     
         Returns:
-            HTML: A Jupyter-renderable HTML object containing the animation as jshtml.
+            HTML or None: Jupyter-renderable HTML object or None if saved to file.
         """
         if member == 0:
             data = self.control[self.var_name]
@@ -493,17 +493,17 @@ class EnsembleChaos:
         three-dimensional perspective of the spatial data.
     
         Args:
-            data: xarray DataArray with t2m temperature data and dimensions including
-                  step, latitude, and longitude, and a valid_time coordinate.
             lat_bnds: slice defining the latitude bounds used for colorscale
                       normalisation and to compute the projection centre latitude
                       (e.g. slice(40, 60)).
             lon_bnds: slice defining the longitude bounds used for colorscale
                       normalisation and to compute the projection centre longitude
                       (e.g. slice(-10, 20)).
+            member: ensemble member to choose (0=control)
+            filename: optional filename for saving the figure
     
         Returns:
-            HTML: A Jupyter-renderable HTML object containing the animation as jshtml.
+            HTML or None: Jupyter-renderable HTML object or None if saved to file.
         """
         if member == 0:
             data = self.control[self.var_name]
