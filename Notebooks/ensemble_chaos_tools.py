@@ -1,7 +1,6 @@
 import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.animation as animation
