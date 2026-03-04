@@ -94,20 +94,56 @@ class EnsembleChaos:
 
         times = temp_control.valid_time.values
 
-        plt.figure(figsize=(16, 4))
-        plt.fill_between(times, low_bounds, up_bounds, alpha=0.2, color="tab:blue")
-        for n in temp_perturbed.number:
-            plt.plot(
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        #fill between max and min of ens members
+        ax.fill_between(
+            times,
+            low_bounds,
+            up_bounds,
+            alpha=0.2,
+            color="lightsteelblue",
+            label="Ensemble Spread",
+        )
+        #plot ens members
+        for i, n in enumerate(temp_perturbed.number):
+            label = "Ensemble Members" if i == 0 else None
+            ax.plot(
                 times,
                 temp_perturbed[self.var_name].sel(number=n),
-                alpha=0.2,
-                color="tab:orange",
+                alpha=0.3,
+                color="cornflowerblue",
+                linewidth=1,
+                zorder=1,  # in the background
+                label=label,
             )
-        plt.plot(times, temp_control[self.var_name], "o-", color="red")
-        plt.title(f"{self.var_name.upper()} at lat:{lat} lon:{lon}")
-        plt.ylabel(f"{self.var_name.upper()}")
-        plt.xlabel("Day")
-        plt.grid()
+        # plot ens mean
+        ens_mean = temp_perturbed[self.var_name].mean(dim="number")
+        ax.plot(
+            times,
+            ens_mean,
+            "-.",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
+            label="Ensemble Mean",
+        )
+        # plot control
+        ax.plot(
+            times,
+            temp_control[self.var_name],
+            "D-",
+            color="darkorange",
+            linewidth=1,
+            markersize=2,
+            zorder=3,
+            label="Control Run",
+        )
+        ax.set_title(f"Trajectories of {self.var_name.upper()} at lat:{lat} lon:{lon}")
+        ax.set_ylabel(f"{self.var_name.upper()}")
+        ax.set_xlabel("Day")
+        ax.legend()
+        plt.tight_layout()
         plt.show()
 
     def plot_trajectories_on_area_mean(self, lat, lon, times=[0, 6, 12, 18]):
@@ -148,37 +184,77 @@ class EnsembleChaos:
 
         times = temp_control.valid_time.values
 
-        plt.figure(figsize=(16, 4))
-        plt.fill_between(times, low_bounds, up_bounds, alpha=0.2, color="tab:blue")
-        for n in temp_perturbed.number:
-            plt.plot(
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        
+        # fill between max and min of ens members
+        ax.fill_between(
+            times,
+            low_bounds,
+            up_bounds,
+            alpha=0.2,
+            color="lightsteelblue",
+            label="Ensemble Spread",
+        )
+        
+        # plot ens members
+        for i, n in enumerate(temp_perturbed.number):
+            label = "Ensemble Members" if i == 0 else None
+            ax.plot(
                 times,
                 temp_perturbed[self.var_name].sel(number=n),
-                alpha=0.2,
-                color="tab:orange",
+                alpha=0.3,
+                color="cornflowerblue",
+                linewidth=1,
+                zorder=1,  # in the background
+                label=label,
             )
-        plt.plot(times, temp_control[self.var_name], "o-", color="red")
-        plt.ylabel(f"{self.var_name.upper()}")
-        plt.xlabel("Day")
-        plt.grid()
+            
+        # plot ens mean
+        ens_mean = temp_perturbed[self.var_name].mean(dim="number")
+        ax.plot(
+            times,
+            ens_mean,
+            "-.",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
+            label="Ensemble Mean",
+        )
+        
+        # plot control
+        ax.plot(
+            times,
+            temp_control[self.var_name],
+            "D-",
+            color="darkorange",
+            linewidth=1,
+            markersize=2,
+            zorder=3,
+            label="Control Run",
+        )
+        
+        ax.set_title(f"Area Mean Trajectories of {self.var_name.upper()}")
+        ax.set_ylabel(f"{self.var_name.upper()}")
+        ax.set_xlabel("Day")
+        ax.legend()
+        plt.tight_layout()
         plt.show()
 
     def lyapunov_single_point(self, lat, lon, times=[0, 6, 12, 18]):
         """Estimate the Lyapunov exponent at a single grid point.
 
-                            Computes the log-RMSE between each perturbed ensemble member and the control
-        run at the nearest grid point, then fits a line to the initial linear growth
-                            region to estimate the Lyapunov exponent.
+        Computes the log-RMSE between each perturbed ensemble member and the control run at the nearest grid point, then fits a line to the initial linear growth region to estimate the Lyapunov exponent.
+    
+        Args:
+            lat: Latitude of the point of interest. The nearest grid point will be selected.
+            lon: Longitude of the point of interest. The nearest grid point will be selected.
+            times: List of hours to filter the data by. Defaults to [0,6,12,18].
 
-                            Args:
-                                lat: Latitude of the point of interest. The nearest grid point will be selected.
-                                lon: Longitude of the point of interest. The nearest grid point will be selected.
-                                times: List of hours to filter the data by. Defaults to [0,6,12,18].
-
-                            Returns:
-                                None. Displays a matplotlib figure showing individual log-RMSE trajectories
-                                (blue), the ensemble mean (orange), and the linear fit (green dashed), and
-                                prints the estimated Lyapunov exponent in days^-1.
+        Returns:
+            None. Displays a matplotlib figure showing individual log-RMSE trajectories
+            (blue), the ensemble mean (orange), and the linear fit (green dashed), and
+            prints the estimated Lyapunov exponent in days^-1.
         """
         # mask to only compute on selected times for each day
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
@@ -214,32 +290,46 @@ class EnsembleChaos:
         lyapunov_exponent = np.round(slope, 3)
 
         # plot and print
-        plt.figure(figsize=(16, 4))
-        plt.ylabel("$log(RMSE)$")
-        plt.xlabel("Day")
-        for n in logdist.number:
-            plt.plot(
-                time_since_start, logdist.sel(number=n), color="tab:blue", alpha=0.1
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.set_ylabel("$log(RMSE)$")
+        ax.set_xlabel("Day")
+
+        for i, n in enumerate(logdist.number):
+            label = "Ensemble Members" if i == 0 else None
+            ax.plot(
+                time_since_start, 
+                logdist.sel(number=n), 
+                color="cornflowerblue", 
+                alpha=0.1,
+                zorder=1,
+                label=label
             )
-        plt.plot(
+
+        ax.plot(
             time_since_start,
             mean_logdist,
             "o-",
-            color="tab:orange",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
             label="Mean $log(RMSE)$",
         )
 
         fit_y = slope * time_since_start[linear_indices] + intercept
-        plt.plot(
+        ax.plot(
             time_since_start[linear_indices],
             fit_y,
-            color="tab:green",
+            color="darkorange",
             linewidth=2,
             ls="--",
+            zorder=3,
             label=f"Linear Part (λ = {lyapunov_exponent})",
         )
 
-        plt.legend()
+        ax.set_title(f"Lyapunov Exponent at lat:{lat} lon:{lon}")
+        ax.legend()
+        plt.tight_layout()
         plt.show()
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
 
@@ -297,32 +387,46 @@ class EnsembleChaos:
         lyapunov_exponent = np.round(slope, 3)
 
         # plot and print
-        plt.figure(figsize=(16, 4))
-        plt.ylabel("$log(RMSE)$")
-        plt.xlabel("Day")
-        for n in logdist.number:
-            plt.plot(
-                time_since_start, logdist.sel(number=n), color="tab:blue", alpha=0.1
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.set_ylabel("$log(RMSE)$")
+        ax.set_xlabel("Day")
+
+        for i, n in enumerate(logdist.number):
+            label = "Ensemble Members" if i == 0 else None
+            ax.plot(
+                time_since_start, 
+                logdist.sel(number=n), 
+                color="cornflowerblue", 
+                alpha=0.1,
+                zorder=1,
+                label=label
             )
-        plt.plot(
+
+        ax.plot(
             time_since_start,
             mean_logdist,
             "o-",
-            color="tab:orange",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
             label="Mean $log(RMSE)$",
         )
 
         fit_y = slope * time_since_start[linear_indices] + intercept
-        plt.plot(
+        ax.plot(
             time_since_start[linear_indices],
             fit_y,
-            color="tab:green",
+            color="darkorange",
             linewidth=2,
             ls="--",
+            zorder=3,
             label=f"Linear Part (λ = {lyapunov_exponent})",
         )
 
-        plt.legend()
+        ax.set_title("Area Mean Lyapunov Exponent")
+        ax.legend()
+        plt.tight_layout()
         plt.show()
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
         return lyapunov_exponent
@@ -394,41 +498,57 @@ class EnsembleChaos:
         lyapunov_exponent = np.round(slope, 3)
 
         # plot and print
-        plt.figure(figsize=(16, 4))
-        plt.ylabel("$log(RMSE)$")
-        plt.xlabel("Day")
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.set_ylabel("$log(RMSE)$")
+        ax.set_xlabel("Day")
+
         for n in range(logdist.shape[0]):
-            plt.plot(time_since_start, logdist[n, :], color="tab:blue", alpha=0.1)
-        plt.plot(
+            label = "Pairwise Differences" if n == 0 else None
+            ax.plot(
+                time_since_start, 
+                logdist[n, :], 
+                color="cornflowerblue", 
+                alpha=0.01,  # Keep ultra-transparent for dense pairwise plotting
+                zorder=1,
+                label=label
+            )
+
+        ax.plot(
             time_since_start,
             mean_logdist,
             "o-",
-            color="tab:orange",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
             label="Mean $log(RMSE)$",
         )
 
         fit_y = slope * time_since_start[linear_indices] + intercept
-        plt.plot(
+        ax.plot(
             time_since_start[linear_indices],
             fit_y,
-            color="tab:green",
+            color="darkorange",
             linewidth=2,
             ls="--",
+            zorder=3,
             label=f"Linear Part (λ = {lyapunov_exponent})",
         )
 
-        plt.legend()
+        ax.set_title("Area Mean Lyapunov Exponent (Pairwise)")
+        ax.legend()
+        plt.tight_layout()
         plt.show()
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
         return lyapunov_exponent
 
     def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None):
         """Animate a temperature field over time using a PlateCarree projection.
-    
+
         Converts temperature from Kelvin to Celsius and renders an animated
         pcolormesh map over the specified region, with a consistent colorscale
         across all frames.
-    
+
         Args:
             lat_bnds: slice defining the latitude bounds of the region to display
                       and use for colorscale normalisation (e.g. slice(40, 60)).
@@ -436,7 +556,7 @@ class EnsembleChaos:
                       and use for colorscale normalisation (e.g. slice(-10, 20)).
             member: ensemble member to choose (0=control)
             filename: optional filename for saving the figure
-    
+
         Returns:
             HTML or None: Jupyter-renderable HTML object or None if saved to file.
         """
@@ -448,50 +568,52 @@ class EnsembleChaos:
             member_label = f"Perturbed Member {member}"
 
         data = data - self.offset
-    
+
         vmin, vmax = (
             data.sel(latitude=lat_bnds, longitude=lon_bnds).min().item(),
             data.sel(latitude=lat_bnds, longitude=lon_bnds).max().item(),
         )
-    
+
         fig, ax = plt.subplots(
             figsize=(10, 8), subplot_kw={"projection": ccrs.PlateCarree()}
         )
-    
-        mesh=data.isel(step=0).plot.pcolormesh(
+
+        mesh = data.isel(step=0).plot.pcolormesh(
             ax=ax, levels=30, cmap="RdBu_r", vmin=vmin, vmax=vmax, add_colorbar=True
         )
-    
+
         ax.set_extent(
             [lon_bnds.start, lon_bnds.stop, lat_bnds.start, lat_bnds.stop],
             crs=ccrs.PlateCarree(),
         )
         ax.coastlines()
-    
+
         # Update loop
         def update(frame):
             step_data = data.isel(step=frame)
             mesh.set_array(step_data.values.ravel())
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
             ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
-    
+
         ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=300)
-        
+
         if filename:
-            ani.save(filename, writer='pillow')
+            ani.save(filename, writer="pillow")
             plt.close(fig)
             return None
         else:
             plt.close(fig)
             return HTML(ani.to_jshtml())
-    
-    def plot_nice_looking_animation_ortho(self, lat_bnds, lon_bnds, member=0, filename=None):
+
+    def plot_nice_looking_animation_ortho(
+        self, lat_bnds, lon_bnds, member=0, filename=None
+    ):
         """Animate a temperature field over time using an Orthographic projection.
-    
+
         Similar to plot_nice_looking_animation, but renders the data on a globe
         centred on the middle of the specified region, providing a more
         three-dimensional perspective of the spatial data.
-    
+
         Args:
             lat_bnds: slice defining the latitude bounds used for colorscale
                       normalisation and to compute the projection centre latitude
@@ -501,7 +623,7 @@ class EnsembleChaos:
                       (e.g. slice(-10, 20)).
             member: ensemble member to choose (0=control)
             filename: optional filename for saving the figure
-    
+
         Returns:
             HTML or None: Jupyter-renderable HTML object or None if saved to file.
         """
@@ -513,21 +635,21 @@ class EnsembleChaos:
             member_label = f"Perturbed Member {member}"
 
         data = data - self.offset
-        
+
         vmin, vmax = (
             data.sel(latitude=lat_bnds, longitude=lon_bnds).min().item(),
             data.sel(latitude=lat_bnds, longitude=lon_bnds).max().item(),
         )
-    
+
         center_lon = (lon_bnds.start + lon_bnds.stop) / 2
         center_lat = (lat_bnds.start + lat_bnds.stop) / 2
-    
+
         fig, ax = plt.subplots(
             figsize=(10, 8),
             subplot_kw={"projection": ccrs.Orthographic(center_lon, center_lat)},
         )
-    
-        mesh=data.isel(step=0).plot.pcolormesh(
+
+        mesh = data.isel(step=0).plot.pcolormesh(
             ax=ax,
             levels=30,
             cmap="RdBu_r",
@@ -538,7 +660,7 @@ class EnsembleChaos:
         )
 
         ax.coastlines()
-        padding=30
+        padding = 30
         ax.set_extent(
             [
                 lon_bnds.start - padding,
@@ -547,18 +669,19 @@ class EnsembleChaos:
                 lat_bnds.stop + padding,
             ],
             crs=ccrs.PlateCarree(),
-        )    
+        )
+
         # Update loop
         def update(frame):
             step_data = data.isel(step=frame)
             mesh.set_array(step_data.values.ravel())
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
             ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
-    
+
         ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=300)
-    
+
         if filename:
-            ani.save(filename, writer='pillow')
+            ani.save(filename, writer="pillow")
             plt.close(fig)
             return None
         else:
