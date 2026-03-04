@@ -17,6 +17,7 @@ All the remaining scripts were run on the Jean-Zay supercomputer and need atleas
 ### Notebooks
 
   - lyapunov_exponents_ensemble_forecasts_ecmwf.ipynb : Preliminary work using ECMWF's IFS and AIFS ensemble weather forecast to study the chaotic behaviour of these systems.
+  - ensemble_chaos_tools.py : Various tools for analyzing chaos and dynamical/thermodynamical properties of forecasts, plot of trajectories, plot of logdists and computation of lyapunov exponents, plot of forecast maps. Create a `EnsembleChaos` object to call the different tools.
 
 ### Scripts
 
