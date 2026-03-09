@@ -542,7 +542,7 @@ class EnsembleChaos:
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
         return lyapunov_exponent
 
-    def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None):
+    def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None,speed=300):
         """Animate a temperature field over time using a PlateCarree projection.
 
         Converts temperature from Kelvin to Celsius and renders an animated
@@ -579,7 +579,7 @@ class EnsembleChaos:
         )
 
         mesh = data.isel(step=0).plot.pcolormesh(
-            ax=ax, levels=30, cmap="RdBu_r", vmin=vmin, vmax=vmax, add_colorbar=True
+            ax=ax, levels=30, cmap="viridis", vmin=vmin, vmax=vmax, add_colorbar=True
         )
 
         ax.set_extent(
@@ -595,7 +595,7 @@ class EnsembleChaos:
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
             ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
 
-        ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=300)
+        ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=speed)
 
         if filename:
             ani.save(filename, writer="pillow")
@@ -660,7 +660,7 @@ class EnsembleChaos:
         )
 
         ax.coastlines()
-        padding = 30
+        padding = 60
         ax.set_extent(
             [
                 lon_bnds.start - padding,
