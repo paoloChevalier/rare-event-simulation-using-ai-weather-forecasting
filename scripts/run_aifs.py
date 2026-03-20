@@ -7,6 +7,7 @@ import os
 #os.environ['ANEMOI_INFERENCE_NUM_CHUNKS'] = '16'
 import pickle
 import glob
+import argparse
 
 from anemoi.inference.runners.simple import SimpleRunner
 from anemoi.inference.outputs.printer import print_state
@@ -91,15 +92,21 @@ def run_aifs(input_path, output_path, date_str, exp_name, checkpoint, lead_time=
             pickle.dump(forecast_steps, f_out)
     
 if __name__ == "__main__":
-    INPUT_PATH = "/lustre/fsn1/projects/rech/udt/udm13lc/inputs_aifs_ensemble_boosting"
-    OUTPUT_PATH = "/lustre/fsn1/projects/rech/udt/udm13lc/outputs_aifs_ensemble_boosting"
-    DATE_STR = "2025062500"
-    CHECKPOINT = "/lustre/fswork/projects/rech/udt/udm13lc/aifs-single-mse-1.0.ckpt"
-    EXP_NAME = "loremipsum"
-    SEED = 14012003
-    LEAD_TIME = 720
-    N_MEMBERS = 50
-    SAVETIMES = [0, 6 ,12 ,18] #could be used to only save certain forecast steps, e.g. every 24 hours with [18], time of day to save
-    VARIABLES = ["2t", "10u", "10v", "z_500"]
-    set_seed(SEED)
-    run_aifs(INPUT_PATH, OUTPUT_PATH, DATE_STR, EXP_NAME, CHECKPOINT, LEAD_TIME, VARIABLES, SAVETIMES, N_MEMBERS)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_path", type=str, required=True)
+    parser.add_argument("--output_path", type=str, required=True)
+    parser.add_argument("--date_str", type=str, required=True)
+    parser.add_argument("--exp_name", type=str, required=True)
+    parser.add_argument("--checkpoint", type=str, required=True)
+    parser.add_argument("--lead_time", type=int, default=720)
+    parser.add_argument("--n_members", type=int, required=True)
+    parser.add_argument("--savetimes", nargs="+", type=int, default=[0, 6, 12, 18])
+    parser.add_argument("--variables", nargs="+", default=["2t", "10u", "10v", "z_500"])
+    parser.add_argument("--seed", type=int, default=14012003)
+    args = parser.parse_args()
+
+    set_seed(args.seed)
+    run_aifs(
+        args.input_path, args.output_path, args.date_str, args.exp_name, 
+        args.checkpoint, args.lead_time, args.variables, args.savetimes, args.n_members
+    )
