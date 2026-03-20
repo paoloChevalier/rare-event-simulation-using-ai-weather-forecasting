@@ -11,7 +11,21 @@ import glob
 from anemoi.inference.runners.simple import SimpleRunner
 from anemoi.inference.outputs.printer import print_state
 
-def run_aifs(input_path, output_path, date_str, checkpoint, lead_time=720, target_variables=["2t", "10u", "10v", "z_500"], times_to_save=[0, 6, 12, 18], N_MEMBERS=50):
+import torch
+import numpy as np
+import random
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+
+def set_deterministic():
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+
+def run_aifs(input_path, output_path, date_str, exp_name, checkpoint, lead_time=720, target_variables=["2t", "10u", "10v", "z_500"], times_to_save=[0, 6, 12, 18], N_MEMBERS=50):
     """Runs the AIFS model for a given set of initial states and saves the forecasts.
     
     Args:
@@ -27,12 +41,21 @@ def run_aifs(input_path, output_path, date_str, checkpoint, lead_time=720, targe
     Returns:
         None, but saves the forecast outputs as .pkl files in the specified output directory.
     """
-    # create the output directory if it doesn't exist
-    os.makedirs(output_path, exist_ok=True)
-    # get the perturbed fields string from one of the input files
-    sample_file = os.path.basename(glob.glob(os.path.join(input_path, f"init_state-{date_str}-*-00.pkl"))[0])
-    fields_str = sample_file.replace(f"init_state-{date_str}-", "").replace("-00.pkl", "")
+    #find details about the experience by itself
+    #find the files
+    dir_pattern = os.path.join(input_path, f"{date_str}-{exp_name}-*")
+    found_dirs = glob.glob(dir_pattern)
+    if not found_dirs:
+        raise FileNotFoundError(f"No input directory found matching: {dir_pattern}")
 
+    #get one of the files
+    in_dir = found_dirs[0]
+    dir_name = os.path.basename(in_dir) # This captures the full string: "2025062500-loremipsum-uniform-1e-04-q"
+
+    #creates the output directry if it doesn't exist
+    out_dir = os.path.join(output_path, dir_name)
+    os.makedirs(out_dir, exist_ok=True)
+    
     #loading the model
     runner = SimpleRunner(checkpoint, device="cuda")
 
@@ -40,8 +63,7 @@ def run_aifs(input_path, output_path, date_str, checkpoint, lead_time=720, targe
     for i in range(N_MEMBERS + 1):
         # format the member id to be two digits, e.g. 00, 01, ..., 50 and construct the input filename
         member_id = f"{i:02d}"
-        input_filename = os.path.join(input_path, f"init_state-{date_str}-{fields_str}-{member_id}.pkl")
-        
+        input_filename = os.path.join(in_dir, f"init_state-{dir_name}-{member_id}.pkl")
         # load the initial state from the input file
         with open(input_filename,"rb") as f:
             input_state = pickle.load(f)
@@ -64,17 +86,20 @@ def run_aifs(input_path, output_path, date_str, checkpoint, lead_time=720, targe
                 forecast_steps.append(filtered_state)
         
         # save the forecast steps to the output file
-        output_filename = os.path.join(output_path, f"aifs_output-{date_str}-{fields_str}-{member_id}.pkl")
+        output_filename = os.path.join(out_dir, f"aifs_output-{dir_name}-{member_id}.pkl")
         with open(output_filename, "wb") as f_out:
             pickle.dump(forecast_steps, f_out)
     
 if __name__ == "__main__":
-    INPUT_PATH = "aaaaa"
-    OUTPUT_PATH = "aaaa"
-    DATE_STR = "YYYYMMDDHH"
-    CHECKPOINT = "path_to_chkpt.ckpt"
+    INPUT_PATH = "/lustre/fsn1/projects/rech/udt/udm13lc/inputs_aifs_ensemble_boosting"
+    OUTPUT_PATH = "/lustre/fsn1/projects/rech/udt/udm13lc/outputs_aifs_ensemble_boosting"
+    DATE_STR = "2025062500"
+    CHECKPOINT = "/lustre/fswork/projects/rech/udt/udm13lc/aifs-single-mse-1.0.ckpt"
+    EXP_NAME = "loremipsum"
+    SEED = 14012003
     LEAD_TIME = 720
     N_MEMBERS = 50
     SAVETIMES = [0, 6 ,12 ,18] #could be used to only save certain forecast steps, e.g. every 24 hours with [18], time of day to save
     VARIABLES = ["2t", "10u", "10v", "z_500"]
-    run_aifs(INPUT_PATH, OUTPUT_PATH, DATE_STR, CHECKPOINT, LEAD_TIME, VARIABLES, SAVETIMES, N_MEMBERS)
+    set_seed(SEED)
+    run_aifs(INPUT_PATH, OUTPUT_PATH, DATE_STR, EXP_NAME, CHECKPOINT, LEAD_TIME, VARIABLES, SAVETIMES, N_MEMBERS)
