@@ -5,10 +5,10 @@ import numpy as np
 import xarray as xr
 import pandas as pd
 import earthkit.regrid as ekr
+import argparse
 
-def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=50):
+def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, exp_name, n_members=50):
     """Converts an ensemble of AIFS forecast pkl files to one regridded NetCDF file per variable.
-
     Reads per-member pickle files produced by run_aifs(), regrids each field
     from the N320 Gaussian grid to a regular 0.25-degree lat/lon grid, and
     writes one NetCDF file per variable with dimensions (number, step, latitude, longitude).
@@ -24,16 +24,24 @@ def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=
         None. Writes one NetCDF file per variable to output_dir, named
         ``aifs_ensemble-<date_str>-<fields_str>-<var>.nc``.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    # Find the input directory by itself
+    dir_pattern = os.path.join(input_dir, f"{date_str}-{exp_name}-*")
+    found_dirs = glob.glob(dir_pattern)
+    if not found_dirs:
+        raise FileNotFoundError(f"No output directory found matching: {dir_pattern}")
+        
+    in_dir = found_dirs[0]
+    dir_name = os.path.basename(in_dir)
+    
+    print(f"[1/4] Starting processing for {dir_name} ({n_members + 1} members)...")
+    
+    # create the exact same directory structure for the NetCDF outputs
+    out_dir = os.path.join(output_dir, dir_name)
+    os.makedirs(out_dir, exist_ok=True)
 
-    # get the perturbed fields string
-    sample_file = os.path.basename(
-        glob.glob(os.path.join(input_dir, f"aifs_output-{date_str}-*-00.pkl"))[0]
-    )
-    fields_str = sample_file.replace(f"aifs_output-{date_str}-", "").replace("-00.pkl", "")
-
-    # load control member to get time steps and variable names
-    control_path = os.path.join(input_dir, f"aifs_output-{date_str}-{fields_str}-00.pkl")
+    # load control member
+    control_path = os.path.join(in_dir, f"aifs_output-{dir_name}-00.pkl")
+    
     with open(control_path, "rb") as f:
         control_data = pickle.load(f)
 
@@ -41,6 +49,8 @@ def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=
     init_time = pd.Timestamp(control_data[0]["date"])
     variables = list(control_data[0]["fields"].keys())
     num_steps = len(control_data)
+    
+    print(f"[2/4] Control loaded. Variables: {variables}, Steps: {num_steps}")
 
     # build step timedeltas and valid times from control member dates
     step_timedeltas = np.array(
@@ -63,9 +73,8 @@ def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=
     }
 
     for member in range(n_members + 1):
-        pkl_file = os.path.join(
-            input_dir, f"aifs_output-{date_str}-{fields_str}-{member:02d}.pkl"
-        )
+        print(f"[3/4] Regridding member {member:02d}/{n_members}...", flush=True)
+        pkl_file = os.path.join(in_dir, f"aifs_output-{dir_name}-{member:02d}.pkl")
         with open(pkl_file, "rb") as f:
             member_data = pickle.load(f)
 
@@ -79,6 +88,7 @@ def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=
 
     # write one .nc file per variable
     for var in variables:
+        print(f"[4/4] Writing variable '{var}' to NetCDF...", flush=True)
         ds = xr.Dataset(
             data_vars={
                 var: (["number", "step", "latitude", "longitude"], all_data[var])
@@ -92,15 +102,21 @@ def pkl_ensemble_to_regridded_netcdf(input_dir, output_dir, date_str, n_members=
                 "longitude":  ("longitude", lons),
             }
         )
-        
-        out_file = os.path.join(output_dir, f"aifs_ensemble-{date_str}-{fields_str}-{var}.nc")
+        out_file = os.path.join(out_dir, f"aifs_ensemble-{dir_name}-{var}.nc")
         ds.to_netcdf(out_file)
+        print(f"      Saved: {out_file}")
+    print(f"All variables written to {out_dir}")
 
 
 if __name__ == "__main__":
-    INPUT_DIR = "aaaaa"
-    OUTPUT_DIR = "bbbbb"
-    DATE_STR = "YYYYMMDDHH"
-    N_MEMBERS = 50
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_dir", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
+    parser.add_argument("--date_str", type=str, required=True)
+    parser.add_argument("--exp_name", type=str, required=True)
+    parser.add_argument("--n_members", type=int, required=True)
+    args = parser.parse_args()
 
-    pkl_ensemble_to_regridded_netcdf(INPUT_DIR, OUTPUT_DIR, DATE_STR, N_MEMBERS)
+    pkl_ensemble_to_regridded_netcdf(
+        args.input_dir, args.output_dir, args.date_str, args.exp_name, args.n_members
+    )
