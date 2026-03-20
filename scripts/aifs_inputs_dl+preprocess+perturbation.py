@@ -13,6 +13,7 @@ import os
 import pickle
 import multiurl #in some versions of earthkit they forgot to import it -_-
 import multiurl.base #in some versions of earthkit they forgot to import it -_-
+import argparse
 
 os.environ["CDSAPI_RC"] = "/home/pchevali/.cdsapirc"
 PARAM_SFC = ["10u", "10v", "2d", "2t", "msl", "skt", "sp", "tcw", "lsm", "z", "slor", "sdor"]
@@ -169,47 +170,42 @@ def uniform_pertubation(state, fields_to_perturbate=["q", "u", "v"], scale=1e-13
     return perturbed
 
 def build_and_save_initial_states(
-    date_input, N_MEMBERS, perturbed_fields, scale, save_path, perturbation_fn=gaussian_pertubation
+    date_input, N_MEMBERS, perturbed_fields, scale, save_path, exp_name, perturbation_type, perturbation_fn=gaussian_pertubation
 ):
     """Builds and saves a control state and an ensemble of perturbed initial states.
 
     Fetches the ERA5-based control initial state for the given date, saves it
-    as member ``00``, then generates ``N_MEMBERS`` perturbed copies using the
+    as member 00, then generates N_MEMBERS perturbed copies using the
     provided perturbation function and saves each as a separate pickle file.
     
-    Output files are written to ``<save_path>/<YYYYMMDDHH>/`` and follow the
-    naming::
-    
-        init_state-<YYYYMMDDHH>-<field1>-<field2>-<NN>.pkl
-    
-    where ``<NN>`` is ``00`` for the control and ``01``–``NN`` for ensemble members.
+    Output files are written to a subdirectory named:
+    <date>-<exp_name>-<perturbation_type>-<scale>-<fields>
     
     Args:
-        date_input (str): Initial date and time as a string in the format
-            ``"%Y-%m-%d %H:%M:%S"`` (e.g. ``"2019-07-10 00:00:00"``).
+        date_input (str): Initial date and time as a string ("%Y-%m-%d %H:%M:%S").
         N_MEMBERS (int): Number of perturbed ensemble members to generate.
-        perturbed_fields (list[str]): Base variable names to perturb
-            (e.g. ``["q", "u", "v"]``).
-        scale (float): Perturbation scale passed to ``perturbation_fn``.
+        perturbed_fields (list[str]): Base variable names to perturb (e.g. ["q"]).
+        scale (float): Perturbation scale passed to perturbation_fn.
         save_path (str): Root directory under which output files are saved.
+        exp_name (str): Name of the experiment for folder and file naming.
+        perturbation_type (str): Label for the noise type (e.g., "uniform", "gaussian").
         perturbation_fn (callable, optional): Function used to perturb the
-            control state. Must have the signature
-            ``fn(state, fields_to_perturbate, scale) -> dict``.
-            Defaults to :func:`gaussian_pertubation`.
+            control state. Defaults to gaussian_pertubation.
     
     Returns:
-        None, but exports all the .pkl.
+        None: Exports .pkl files 
     """
     DATE = datetime.datetime.strptime(date_input, "%Y-%m-%d %H:%M:%S")
     date_str = DATE.strftime("%Y%m%d%H")
-    output_dir = os.path.join(save_path, date_str)
     fields_str = "-".join(perturbed_fields)
+    scale_str = f"{scale:.0e}"
+    output_dir = os.path.join(save_path, f"{date_str}-{exp_name}-{perturbation_type}-{scale_str}-{fields_str}")
     os.makedirs(output_dir, exist_ok=True)
 
     init_control_state = build_initial_state(DATE)
 
     with open(
-        os.path.join(output_dir, f"init_state-{date_str}-{fields_str}-00.pkl"), "wb"
+        os.path.join(output_dir, f"init_state-{date_str}-{exp_name}-{perturbation_type}-{scale_str}-{fields_str}-00.pkl"), "wb"
     ) as f:
         pickle.dump(init_control_state, f)
 
@@ -218,17 +214,28 @@ def build_and_save_initial_states(
             init_control_state, fields_to_perturbate=perturbed_fields, scale=scale
         )
         with open(
-            os.path.join(output_dir, f"init_state-{date_str}-{fields_str}-{i:02d}.pkl"),
-            "wb",
+            os.path.join(output_dir, f"init_state-{date_str}-{exp_name}-{perturbation_type}-{scale_str}-{fields_str}-{i:02d}.pkl"),
+            "wb"
         ) as f:
             pickle.dump(perturbed_state, f)
 
 if __name__ == "__main__":
-    date_input = "2019-07-10 00:00:00"
-    N_MEMBERS = 50
-    perturbed_fields = ["q", "u", "v"]
-    scale = 1e-13
-    OUTPUT_SAVE = "/homedata/pchevali/AIFS_INPUTS/"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--date_input", type=str, required=True)
+    parser.add_argument("--n_members", type=int, required=True)
+    parser.add_argument("--perturbed_fields", nargs="+", required=True) # nargs="+" allows passing multiple fields like: q u v
+    parser.add_argument("--scale", type=float, required=True)
+    parser.add_argument("--exp_name", type=str, required=True)
+    parser.add_argument("--pert_type", type=str, required=True)
+    parser.add_argument("--output_save", type=str, required=True)
+    args = parser.parse_args()
+    
+    if args.pert_type.lower() == "uniform":
+        fn = uniform_pertubation
+    else:
+        fn = gaussian_pertubation
+    
     build_and_save_initial_states(
-        date_input, N_MEMBERS, perturbed_fields, scale, OUTPUT_SAVE, uniform_pertubation
+        args.date_input, args.n_members, args.perturbed_fields, args.scale, 
+        args.output_save, args.exp_name, args.pert_type, fn
     )
