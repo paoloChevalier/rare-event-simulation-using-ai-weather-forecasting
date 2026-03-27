@@ -544,7 +544,7 @@ class EnsembleChaos:
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
         return lyapunov_exponent
 
-    def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None,speed=300):
+    def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None,speed=300, cmap="viridis"):
         """Animate a temperature field over time using a PlateCarree projection.
 
         Converts temperature from Kelvin to Celsius and renders an animated
@@ -581,7 +581,7 @@ class EnsembleChaos:
         )
 
         mesh = data.isel(step=0).plot.pcolormesh(
-            ax=ax, levels=30, cmap="viridis", vmin=vmin, vmax=vmax, add_colorbar=True
+            ax=ax, levels=30, cmap=cmap, vmin=vmin, vmax=vmax, add_colorbar=True
         )
 
         ax.set_extent(
