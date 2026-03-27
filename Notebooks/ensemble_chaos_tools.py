@@ -5,7 +5,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import matplotlib.animation as animation
 from IPython.display import HTML
-
+from scipy.optimize import curve_fit
 
 def fix_lat_lon(data):
     """Tidy latitude and longitude data.
@@ -62,7 +62,7 @@ class EnsembleChaos:
         self.control = fix_lat_lon(control).sortby("step")
         self.perturbed = fix_lat_lon(perturbed).sortby("step")
         self.var_name = var_name
-        self.offset = 273.15 if var_name in ["t2m", "tas", "ts", "t2"] else 0.0
+        self.offset = 273.15 if var_name in ["t2m", "tas", "ts", "t2", "2t"] else 0.0
 
     def plot_trajectories_on_single_point(self, lat, lon, times=[0, 6, 12, 18]):
         """Plot the trajectories for a control run and perturbed ensemble at a single grid point.
@@ -490,14 +490,6 @@ class EnsembleChaos:
             "timedelta64[h]"
         ).astype(float) / 24.0
 
-        # compute the lyapunov exponent
-        linear_indices = find_linear_part(time_since_start, mean_logdist)
-        slope, intercept = np.polyfit(
-            time_since_start[linear_indices], mean_logdist[linear_indices], 1
-        )
-        lyapunov_exponent = np.round(slope, 3)
-
-        # plot and print
         plt.style.use("seaborn-v0_8-whitegrid")
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.set_ylabel("$log(RMSE)$")
@@ -509,7 +501,7 @@ class EnsembleChaos:
                 time_since_start, 
                 logdist[n, :], 
                 color="cornflowerblue", 
-                alpha=0.01,  # Keep ultra-transparent for dense pairwise plotting
+                alpha=0.05,
                 zorder=1,
                 label=label
             )
@@ -523,6 +515,16 @@ class EnsembleChaos:
             zorder=2,
             label="Mean $log(RMSE)$",
         )
+        
+        # compute the lyapunov exponent
+        linear_indices = find_linear_part(time_since_start, mean_logdist)
+        slope, intercept = np.polyfit(
+            time_since_start[linear_indices], mean_logdist[linear_indices], 1
+        )
+        lyapunov_exponent = np.round(slope, 3)
+
+        # plot and print
+
 
         fit_y = slope * time_since_start[linear_indices] + intercept
         ax.plot(
@@ -687,3 +689,137 @@ class EnsembleChaos:
         else:
             plt.close(fig)
             return HTML(ani.to_jshtml())
+
+## tests
+    def growth_rate_pairwise(self, lat, lon, times=[0, 6, 12, 18]):
+        """Estimate the upper-bound predictability limit and growth rate (alpha) over a spatial region.
+
+        Unlike lyapunov_over_area_pairwise which uses a linear fit on log-RMSE, 
+        this function computes the root-mean-square error (RMSE) for all unique pairs 
+        and fits the Lorenz logistic growth model (dE/dt = alpha * E * (1 - E/E_inf)) 
+        to estimate the error growth rate (alpha) and the saturation error (E_inf).
+
+        Args:
+            lat: Slice or array of latitudes defining the region to average over.
+            lon: Slice or array of longitudes defining the region to average over.
+            times: List of hours to filter the data by. Defaults to [0,6,12,18].
+
+        Returns:
+            alpha, E_inf: Estimated growth rate (days^-1) and saturation error, rounded to 3 
+                          decimal places. Also displays a matplotlib figure and prints the result.
+        """
+        time_mask_control = self.control.valid_time.dt.hour.isin(times)
+        time_mask_perturbed = self.perturbed.valid_time.dt.hour.isin(times)
+
+        # select only the area on the point we're interested in and times we want
+        temp_control = self.control.sel(latitude=lat, longitude=lon).sel(
+            step=time_mask_control
+        )[self.var_name]
+        temp_perturbed = self.perturbed.sel(latitude=lat, longitude=lon).sel(
+            step=time_mask_perturbed
+        )[self.var_name]
+
+        # computation of logdist
+        temp = (
+            xr.concat(
+                [temp_control.expand_dims("number"), temp_perturbed], dim="number"
+            )
+            .transpose("number", "step", "latitude", "longitude")
+            .values
+        )
+        sq_diff = (temp[:, None, :, :, :] - temp[None, :, :, :, :]) ** 2
+
+        mean_sq_lon = np.mean(sq_diff, axis=-1)  # mean over longitude cos not weighted
+        weights_lat = np.cos(
+            np.deg2rad(temp_control.latitude.values)
+        )  # weights for latitude
+        mean_sq_diff = np.average(
+            mean_sq_lon, axis=-1, weights=weights_lat
+        )  # weighted mean
+        rmse = np.sqrt(mean_sq_diff)
+
+        # Pairwise extractions 
+        pairwise_rmse = rmse[np.triu_indices(rmse.shape[0], k=1)]
+        logdist = np.log(pairwise_rmse)
+        
+        # We need mean_rmse for the curve fit, and mean_logdist for plotting
+        mean_rmse = np.mean(pairwise_rmse, axis=0)
+        mean_logdist = np.mean(logdist, axis=0)
+
+        # extract times for better plotting
+        time_indexes = temp_control.valid_time.values
+        time_since_start = (time_indexes - time_indexes[0]).astype(
+            "timedelta64[h]"
+        ).astype(float) / 24.0
+
+        # compute alpha and E_inf
+        dE = np.diff(mean_rmse)
+        dt = np.diff(time_since_start)
+        y_growth_rate = dE / dt #LHS, dE
+        x_mean_error = (mean_rmse[:-1] + mean_rmse[1:]) / 2.0 #variable of the RHS, E (since we used diff for the LHS, it's of size -1, so we take the midpoints of each interval)
+
+        def lorenz_growth_model(E, alpha_param, E_inf_param):
+            return alpha_param * E * (1.0 - E / E_inf_param)
+
+        max_E = np.max(mean_rmse)
+        popt, _ = curve_fit(
+            lorenz_growth_model, 
+            x_mean_error, 
+            y_growth_rate, 
+            p0=[0.3, max_E], 
+            bounds=([0.0, 3], [0.5, max_E * 2]) #alpha should be around 0.3/0.4 anyway
+        )
+        
+        alpha = np.round(popt[0], 3)
+        E_inf = np.round(popt[1], 3)
+
+        # plot and print
+        plt.style.use("seaborn-v0_8-whitegrid")
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.set_ylabel("$log(RMSE)$")
+        ax.set_xlabel("Day")
+
+        for n in range(logdist.shape[0]):
+            label = "Pairwise Differences" if n == 0 else None
+            ax.plot(
+                time_since_start, 
+                logdist[n, :], 
+                color="cornflowerblue", 
+                alpha=0.05,
+                zorder=1,
+                label=label
+            )
+
+        ax.plot(
+            time_since_start,
+            mean_logdist,
+            "o-",
+            color="midnightblue",
+            linewidth=1.5,
+            zorder=2,
+            label="Mean $log(RMSE)$",
+        )
+
+        # fit for plotting
+        E0 = mean_rmse[0]
+        E_theoretical = E_inf / (1 + ((E_inf - E0) / E0) * np.exp(-alpha * time_since_start))
+        log_E_theoretical = np.log(E_theoretical)
+
+        ax.plot(
+            time_since_start,
+            log_E_theoretical,
+            color="darkorange",
+            linewidth=2,
+            ls="--",
+            zorder=3,
+            label=f"Fit (α = {alpha})",
+        )
+
+        ax.set_title("Area Mean Predictability (Pairwise)")
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+        
+        print(f"Estimated Growth Rate (α): {alpha} days^-1 | Saturation Error (E_inf): {E_inf}")
+        
+        return alpha, E_inf
