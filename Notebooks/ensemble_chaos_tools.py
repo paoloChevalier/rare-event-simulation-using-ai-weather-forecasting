@@ -7,6 +7,7 @@ import matplotlib.animation as animation
 from IPython.display import HTML
 from scipy.optimize import curve_fit
 
+
 def fix_lat_lon(data):
     """Tidy latitude and longitude data.
 
@@ -96,7 +97,7 @@ class EnsembleChaos:
 
         plt.style.use("seaborn-v0_8-whitegrid")
         fig, ax = plt.subplots(figsize=(8, 4))
-        #fill between max and min of ens members
+        # fill between max and min of ens members
         ax.fill_between(
             times,
             low_bounds,
@@ -105,7 +106,7 @@ class EnsembleChaos:
             color="lightsteelblue",
             label="Ensemble Spread",
         )
-        #plot ens members
+        # plot ens members
         for i, n in enumerate(temp_perturbed.number):
             label = "Ensemble Members" if i == 0 else None
             ax.plot(
@@ -186,7 +187,7 @@ class EnsembleChaos:
 
         plt.style.use("seaborn-v0_8-whitegrid")
         fig, ax = plt.subplots(figsize=(8, 4))
-        
+
         # fill between max and min of ens members
         ax.fill_between(
             times,
@@ -196,7 +197,7 @@ class EnsembleChaos:
             color="lightsteelblue",
             label="Ensemble Spread",
         )
-        
+
         # plot ens members
         for i, n in enumerate(temp_perturbed.number):
             label = "Ensemble Members" if i == 0 else None
@@ -209,7 +210,7 @@ class EnsembleChaos:
                 zorder=1,  # in the background
                 label=label,
             )
-            
+
         # plot ens mean
         ens_mean = temp_perturbed[self.var_name].mean(dim="number")
         ax.plot(
@@ -221,7 +222,7 @@ class EnsembleChaos:
             zorder=2,
             label="Ensemble Mean",
         )
-        
+
         # plot control
         ax.plot(
             times,
@@ -233,7 +234,7 @@ class EnsembleChaos:
             zorder=3,
             label="Control Run",
         )
-        
+
         ax.set_title(f"Area Mean Trajectories of {self.var_name.upper()}")
         ax.set_ylabel(f"{self.var_name.upper()}")
         ax.set_xlabel("Day")
@@ -245,7 +246,7 @@ class EnsembleChaos:
         """Estimate the Lyapunov exponent at a single grid point.
 
         Computes the log-RMSE between each perturbed ensemble member and the control run at the nearest grid point, then fits a line to the initial linear growth region to estimate the Lyapunov exponent.
-    
+
         Args:
             lat: Latitude of the point of interest. The nearest grid point will be selected.
             lon: Longitude of the point of interest. The nearest grid point will be selected.
@@ -298,12 +299,12 @@ class EnsembleChaos:
         for i, n in enumerate(logdist.number):
             label = "Ensemble Members" if i == 0 else None
             ax.plot(
-                time_since_start, 
-                logdist.sel(number=n), 
-                color="cornflowerblue", 
+                time_since_start,
+                logdist.sel(number=n),
+                color="cornflowerblue",
                 alpha=0.1,
                 zorder=1,
-                label=label
+                label=label,
             )
 
         ax.plot(
@@ -395,12 +396,12 @@ class EnsembleChaos:
         for i, n in enumerate(logdist.number):
             label = "Ensemble Members" if i == 0 else None
             ax.plot(
-                time_since_start, 
-                logdist.sel(number=n), 
-                color="cornflowerblue", 
+                time_since_start,
+                logdist.sel(number=n),
+                color="cornflowerblue",
                 alpha=0.1,
                 zorder=1,
-                label=label
+                label=label,
             )
 
         ax.plot(
@@ -462,26 +463,30 @@ class EnsembleChaos:
         )[self.var_name]
 
         # computation of logdist
-        temp = (
+        data = (
             xr.concat(
                 [temp_control.expand_dims("number"), temp_perturbed], dim="number"
             )
-            .transpose("number", "step", "latitude", "longitude")
-            .values
+            .stack(space=["latitude", "longitude"]
+                  ).transpose("step", "number", "space")
         )
-        sq_diff = (temp[:, None, :, :, :] - temp[None, :, :, :, :]) ** 2
+        
+        # weights
+        weights = np.cos(np.deg2rad(data.latitude.values))
+        weights_norm = weights / np.mean(weights)
 
-        mean_sq_lon = np.mean(sq_diff, axis=-1)  # mean over longitude cos not weighted
-        weights_lat = np.cos(
-            np.deg2rad(temp_control.latitude.values)
-        )  # weights for latitude
-        mean_sq_diff = np.average(
-            mean_sq_lon, axis=-1, weights=weights_lat
-        )  # weighted mean
-        rmse = np.sqrt(mean_sq_diff)
+        # compute RMSE pairwise relatively fast
+        v = data.values #extract numpy array
+        sq_mean = np.mean((v**2) * weights_norm, axis=-1) #compute the squared mean of the data for an ensemble and step [step x number]
+        # dark magic for the compute of the cross term when expanding the square, first apply the weights on one of the terms then
+        # perform a batched matrix multiplication (@) to calculate the dot product of every ensemble pair (2AB) acrros all time steps
+        #the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
+        rmse = np.sqrt(np.maximum((sq_mean[:, :, None] + sq_mean[:, None, :] - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]).transpose(1, 2, 0), 0))
 
-        # rmse = np.sqrt(np.mean(sq_diff, axis=(-1, -2))) #old un weighted mean
-        logdist = np.log(rmse[np.triu_indices(rmse.shape[0], k=1)])
+        # Pairwise extractions and then mean over all ensemble pairs
+        pairwise_rmse = rmse[np.triu_indices(rmse.shape[0], k=1)]
+        logdist = np.log(pairwise_rmse)
+        mean_rmse = np.mean(pairwise_rmse, axis=0)
         mean_logdist = np.mean(logdist, axis=0)
 
         # extract times for better plotting
@@ -498,12 +503,12 @@ class EnsembleChaos:
         for n in range(logdist.shape[0]):
             label = "Pairwise Differences" if n == 0 else None
             ax.plot(
-                time_since_start, 
-                logdist[n, :], 
-                color="cornflowerblue", 
+                time_since_start,
+                logdist[n, :],
+                color="cornflowerblue",
                 alpha=0.05,
                 zorder=1,
-                label=label
+                label=label,
             )
 
         ax.plot(
@@ -515,7 +520,7 @@ class EnsembleChaos:
             zorder=2,
             label="Mean $log(RMSE)$",
         )
-        
+
         # compute the lyapunov exponent
         linear_indices = find_linear_part(time_since_start, mean_logdist)
         slope, intercept = np.polyfit(
@@ -524,7 +529,6 @@ class EnsembleChaos:
         lyapunov_exponent = np.round(slope, 3)
 
         # plot and print
-
 
         fit_y = slope * time_since_start[linear_indices] + intercept
         ax.plot(
@@ -544,7 +548,9 @@ class EnsembleChaos:
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
         return lyapunov_exponent
 
-    def plot_nice_looking_animation(self, lat_bnds, lon_bnds, member=0, filename=None,speed=300, cmap="viridis"):
+    def plot_nice_looking_animation(
+        self, lat_bnds, lon_bnds, member=0, filename=None, speed=300, cmap="viridis"
+    ):
         """Animate a temperature field over time using a PlateCarree projection.
 
         Converts temperature from Kelvin to Celsius and renders an animated
@@ -597,7 +603,9 @@ class EnsembleChaos:
             time_str = np.datetime_as_string(step_data.valid_time.values, unit="h")
             ax.set_title(f"[{member_label}] Step: {frame} | Time: {time_str}")
 
-        ani = animation.FuncAnimation(fig, update, frames=len(data.step), interval=speed)
+        ani = animation.FuncAnimation(
+            fig, update, frames=len(data.step), interval=speed
+        )
 
         if filename:
             ani.save(filename, writer="pillow")
@@ -690,13 +698,12 @@ class EnsembleChaos:
             plt.close(fig)
             return HTML(ani.to_jshtml())
 
-## tests
     def growth_rate_pairwise(self, lat, lon, times=[0, 6, 12, 18]):
         """Estimate the upper-bound predictability limit and growth rate (alpha) over a spatial region.
 
-        Unlike lyapunov_over_area_pairwise which uses a linear fit on log-RMSE, 
-        this function computes the root-mean-square error (RMSE) for all unique pairs 
-        and fits the Lorenz logistic growth model (dE/dt = alpha * E * (1 - E/E_inf)) 
+        Unlike lyapunov_over_area_pairwise which uses a linear fit on log-RMSE,
+        this function computes the root-mean-square error (RMSE) for all unique pairs
+        and fits the Lorenz logistic growth model (dE/dt = alpha * E * (1 - E/E_inf))
         to estimate the error growth rate (alpha) and the saturation error (E_inf).
 
         Args:
@@ -705,7 +712,7 @@ class EnsembleChaos:
             times: List of hours to filter the data by. Defaults to [0,6,12,18].
 
         Returns:
-            alpha, E_inf: Estimated growth rate (days^-1) and saturation error, rounded to 3 
+            alpha, E_inf: Estimated growth rate (days^-1) and saturation error, rounded to 3
                           decimal places. Also displays a matplotlib figure and prints the result.
         """
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
@@ -720,29 +727,41 @@ class EnsembleChaos:
         )[self.var_name]
 
         # computation of logdist
-        temp = (
+        data = (
             xr.concat(
                 [temp_control.expand_dims("number"), temp_perturbed], dim="number"
             )
-            .transpose("number", "step", "latitude", "longitude")
-            .values
+            .stack(space=["latitude", "longitude"]
+                  ).transpose("step", "number", "space")
         )
-        sq_diff = (temp[:, None, :, :, :] - temp[None, :, :, :, :]) ** 2
 
-        mean_sq_lon = np.mean(sq_diff, axis=-1)  # mean over longitude cos not weighted
-        weights_lat = np.cos(
-            np.deg2rad(temp_control.latitude.values)
-        )  # weights for latitude
-        mean_sq_diff = np.average(
-            mean_sq_lon, axis=-1, weights=weights_lat
-        )  # weighted mean
-        rmse = np.sqrt(mean_sq_diff)
+        # sq_diff = (temp[:, None, :, :, :] - temp[None, :, :, :, :]) ** 2
 
-        # Pairwise extractions 
+        # mean_sq_lon = np.mean(sq_diff, axis=-1)  # mean over longitude cos not weighted
+        # weights_lat = np.cos(
+        #     np.deg2rad(temp_control.latitude.values)
+        # )  # weights for latitude
+        # mean_sq_diff = np.average(
+        #     mean_sq_lon, axis=-1, weights=weights_lat
+        # )  # weighted mean
+        # rmse = np.sqrt(mean_sq_diff)
+
+        # weights
+        weights = np.cos(np.deg2rad(data.latitude.values))
+        weights_norm = weights / np.mean(weights)
+
+        # compute RMSE pairwise relatively fast
+        v = data.values #extract numpy array
+        sq_mean = np.mean((v**2) * weights_norm, axis=-1) #compute the squared mean of the data for an ensemble and step [step x number]
+        # dark magic for the compute of the cross term when expanding the square, first apply the weights on one of the terms then
+        # perform a batched matrix multiplication (@) to calculate the dot product of every ensemble pair (2AB) acrros all time steps
+        #the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
+        rmse = np.sqrt(np.maximum((sq_mean[:, :, None] + sq_mean[:, None, :] - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]).transpose(1, 2, 0), 0))
+        #max in case matmul gives smth <0, happens sometimes when numbers are very small
+
+        # Pairwise extractions and then mean over all ensemble pairs
         pairwise_rmse = rmse[np.triu_indices(rmse.shape[0], k=1)]
         logdist = np.log(pairwise_rmse)
-        
-        # We need mean_rmse for the curve fit, and mean_logdist for plotting
         mean_rmse = np.mean(pairwise_rmse, axis=0)
         mean_logdist = np.mean(logdist, axis=0)
 
@@ -752,24 +771,25 @@ class EnsembleChaos:
             "timedelta64[h]"
         ).astype(float) / 24.0
 
-        # compute alpha and E_inf
-        dE = np.diff(mean_rmse)
-        dt = np.diff(time_since_start)
-        y_growth_rate = dE / dt #LHS, dE
-        x_mean_error = (mean_rmse[:-1] + mean_rmse[1:]) / 2.0 #variable of the RHS, E (since we used diff for the LHS, it's of size -1, so we take the midpoints of each interval)
+        # fit lorenz model
+        # solution of lorenz model for growth
+        E0 = mean_rmse[0]
 
-        def lorenz_growth_model(E, alpha_param, E_inf_param):
-            return alpha_param * E * (1.0 - E / E_inf_param)
+        def logistic_solution(t, alpha_param, E_inf_param):
+            return E_inf_param / (
+                1.0 + ((E_inf_param - E0) / E0) * np.exp(-alpha_param * t)
+            )
 
         max_E = np.max(mean_rmse)
+
         popt, _ = curve_fit(
-            lorenz_growth_model, 
-            x_mean_error, 
-            y_growth_rate, 
-            p0=[0.3, max_E], 
-            bounds=([0.0, 3], [0.5, max_E * 2]) #alpha should be around 0.3/0.4 anyway
+            logistic_solution,
+            time_since_start,
+            mean_rmse,
+            p0=[0.3, max_E],
+            bounds=([0.0, 0.0], [1, max_E * 5.0]),
         )
-        
+
         alpha = np.round(popt[0], 3)
         E_inf = np.round(popt[1], 3)
 
@@ -782,12 +802,12 @@ class EnsembleChaos:
         for n in range(logdist.shape[0]):
             label = "Pairwise Differences" if n == 0 else None
             ax.plot(
-                time_since_start, 
-                logdist[n, :], 
-                color="cornflowerblue", 
+                time_since_start,
+                logdist[n, :],
+                color="cornflowerblue",
                 alpha=0.05,
                 zorder=1,
-                label=label
+                label=label,
             )
 
         ax.plot(
@@ -801,8 +821,7 @@ class EnsembleChaos:
         )
 
         # fit for plotting
-        E0 = mean_rmse[0]
-        E_theoretical = E_inf / (1 + ((E_inf - E0) / E0) * np.exp(-alpha * time_since_start))
+        E_theoretical = logistic_solution(time_since_start, alpha, E_inf)
         log_E_theoretical = np.log(E_theoretical)
 
         ax.plot(
@@ -819,7 +838,9 @@ class EnsembleChaos:
         ax.legend()
         plt.tight_layout()
         plt.show()
-        
-        print(f"Estimated Growth Rate (α): {alpha} days^-1 | Saturation Error (E_inf): {E_inf}")
-        
+
+        print(
+            f"Estimated Growth Rate (α): {alpha} days^-1 | Saturation Error (E_inf): {E_inf}"
+        )
+
         return alpha, E_inf
