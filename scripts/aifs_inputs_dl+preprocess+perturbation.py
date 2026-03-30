@@ -170,8 +170,8 @@ def uniform_pertubation(state, fields_to_perturbate=["q", "u", "v"], scale=1e-13
     return perturbed
 
 def build_and_save_initial_states(
-    date_input, N_MEMBERS, perturbed_fields, scale, save_path, exp_name, perturbation_type, perturbation_fn=gaussian_pertubation
-):
+    init_control_state, date_input, N_MEMBERS, perturbed_fields, scale, 
+    save_path, exp_name, perturbation_type, perturbation_fn):
     """Builds and saves a control state and an ensemble of perturbed initial states.
 
     Fetches the ERA5-based control initial state for the given date, saves it
@@ -202,13 +202,13 @@ def build_and_save_initial_states(
     output_dir = os.path.join(save_path, f"{date_str}-{exp_name}-{perturbation_type}-{scale_str}-{fields_str}")
     os.makedirs(output_dir, exist_ok=True)
 
-    init_control_state = build_initial_state(DATE)
-
+    #save control
     with open(
         os.path.join(output_dir, f"init_state-{date_str}-{exp_name}-{perturbation_type}-{scale_str}-{fields_str}-00.pkl"), "wb"
     ) as f:
         pickle.dump(init_control_state, f)
 
+    #make and save perturbed ens members
     for i in tqdm(range(1, N_MEMBERS + 1)):
         perturbed_state = perturbation_fn(
             init_control_state, fields_to_perturbate=perturbed_fields, scale=scale
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument("--date_input", type=str, required=True)
     parser.add_argument("--n_members", type=int, required=True)
     parser.add_argument("--perturbed_fields", nargs="+", required=True) # nargs="+" allows passing multiple fields like: q u v
-    parser.add_argument("--scale", type=float, required=True)
+    parser.add_argument("--scales", nargs="+", type=float, required=True)
     parser.add_argument("--exp_name", type=str, required=True)
     parser.add_argument("--pert_type", type=str, required=True)
     parser.add_argument("--output_save", type=str, required=True)
@@ -234,8 +234,21 @@ if __name__ == "__main__":
         fn = uniform_pertubation
     else:
         fn = gaussian_pertubation
+        
+    print(f"Downloading and interpolating control state for {args.date_input}...")
+    init_control_state = build_initial_state(args.date_input)
     
-    build_and_save_initial_states(
-        args.date_input, args.n_members, args.perturbed_fields, args.scale, 
-        args.output_save, args.exp_name, args.pert_type, fn
-    )
+    print("Generating ensembles members")
+    
+    #loop over the fields and scales of the experiment (avoids restarting the script multiple times)
+    for fields_group in args.perturbed_fields:
+        # Split "u,v" into ["u", "v"]
+        fields_list = fields_group.split(",") 
+        
+        for scale in args.scales:
+            build_and_save_initial_states(
+                init_control_state, args.date_input, args.n_members, fields_list, 
+                scale, args.output_save, args.exp_name, args.pert_type, fn
+            )
+    
+    print("Done")
