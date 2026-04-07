@@ -135,7 +135,8 @@ def gaussian_pertubation(state, fields_to_perturbate=["q", "u", "v"], scale=1e-1
         base_var = key.split("_")[0]
         # perturbate only what we want to
         if key in fields_to_perturbate or base_var in fields_to_perturbate:
-            noise = np.random.normal(loc=0.0, scale=scale, size=arrays.shape)
+            noise_shape=(1,arrays.shape[1])
+            noise = np.random.normal(loc=0.0, scale=scale, size=noise_shape)
             perturbed["fields"][key] = arrays * (1 + noise)
     return perturbed
 
@@ -165,7 +166,61 @@ def uniform_pertubation(state, fields_to_perturbate=["q", "u", "v"], scale=1e-13
         base_var = key.split("_")[0]
         # perturbate only what we want to
         if key in fields_to_perturbate or base_var in fields_to_perturbate:
-            noise = np.random.uniform(-0.5, 0.5, size=arrays.shape)
+            noise_shape=(1,arrays.shape[1])
+            noise = np.random.uniform(-0.5, 0.5, size=noise_shape)
+            perturbed["fields"][key] = arrays * (1 + scale * noise)
+    return perturbed
+
+
+def brownian_perturbation(state, fields_to_perturbate=["q", "u", "v"], scale=1e-13):
+    """Applies a brownian noise to selected fields of a model state.
+
+    Creates a deep copy of the input state and perturbs the specified fields
+    by multiplying each value by ``(1 + scale * B(-0.5, 0.5))``.
+    
+    Args:
+        state (dict): A state dictionary as returned by ``build_initial_state``,
+            containing a ``"fields"`` key mapping parameter names to NumPy arrays.
+        fields_to_perturbate (list[str], optional): List of base variable names
+            to perturb (e.g. ``["q", "u", "v"]``). Both exact key matches and
+            pressure-level keys (e.g. ``"q_500"``) are perturbed. Defaults to
+            ``["q", "u", "v"]``.
+        scale (float, optional): Scaling factor applied to the noise
+            drawn from ``U(-0.5, 0.5)``. Defaults to ``1e-13``.
+    
+    Returns:
+        dict: A deep copy of ``state`` with the specified fields perturbed.
+    """
+
+    def _generate_brownian_noise(shape,reddening=1.6):
+        """Utility for producing 2D brown noise via NumPy FFT."""
+        noise = np.random.normal(loc=0.0, scale=0.33, size=shape)
+        x_white = np.fft.rfft2(noise)
+
+        S = (np.abs(np.fft.fftfreq(shape[-2]).reshape(-1, 1)) ** reddening) + (
+            np.fft.rfftfreq(shape[-1]) ** reddening
+        )
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            S = 1.0 / S
+        S[..., 0, 0] = 0.0
+        S = S / np.sqrt(np.mean(S**2))
+
+        x_shaped = x_white * S
+        noise_shaped = np.fft.irfft2(x_shaped, s=(shape[-2], shape[-1]))
+
+        
+        return ekr.interpolate(noise_shaped, {"grid": (0.25, 0.25)}, {"grid": "N320"})
+        
+    
+    perturbed = copy.deepcopy(state)
+    for key, arrays in perturbed["fields"].items():
+        # extract the base variable name (e.g., 'q' from 'q_500')
+        base_var = key.split("_")[0]
+        # perturbate only what we want to
+        if key in fields_to_perturbate or base_var in fields_to_perturbate:
+            noise_shape=(1,721,1440)
+            noise = _generate_brownian_noise(shape=noise_shape)
             perturbed["fields"][key] = arrays * (1 + scale * noise)
     return perturbed
 
@@ -232,11 +287,14 @@ if __name__ == "__main__":
     
     if args.pert_type.lower() == "uniform":
         fn = uniform_pertubation
-    else:
+    elif args.pert_type.lower() == "gaussian":
         fn = gaussian_pertubation
+    elif args.pert_type.lower() == "brownian":
+        fn = brownian_perturbation
         
     print(f"Downloading and interpolating control state for {args.date_input}...")
-    init_control_state = build_initial_state(args.date_input)
+    DATE = datetime.datetime.strptime(args.date_input, "%Y-%m-%d %H:%M:%S")
+    init_control_state = build_initial_state(DATE)
     
     print("Generating ensembles members")
     
