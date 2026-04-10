@@ -5,10 +5,6 @@ import os
 
 os.environ["PYTHONHASHSEED"] = "14012003"
 
-# if usage is too expensive on ram
-os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True' 
-os.environ['ANEMOI_INFERENCE_NUM_CHUNKS'] = '16'
-
 import pickle
 import glob
 import argparse
@@ -28,6 +24,8 @@ def set_seed(seed):
     
 
 def set_deterministic():
+    os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True' # if usage is too expensive on ram
+    os.environ['ANEMOI_INFERENCE_NUM_CHUNKS'] = '16' # if usage is too expensive on ram
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
@@ -109,10 +107,13 @@ if __name__ == "__main__":
     parser.add_argument("--savetimes", nargs="+", type=int, default=[0, 6, 12, 18])
     parser.add_argument("--variables", nargs="+", default=["2t", "10u", "10v", "z_500"])
     parser.add_argument("--seed", type=int, default=14012003)
+    parser.add_argument("--deterministic",action="store_true")
     args = parser.parse_args()
 
-    set_seed(args.seed)
-    set_deterministic()
+    if args.deterministic:
+        set_seed(args.seed)
+        set_deterministic()
+
     run_aifs(
         args.input_path, args.output_path, args.date_str, args.exp_name, 
         args.checkpoint, args.lead_time, args.variables, args.savetimes, args.n_members
