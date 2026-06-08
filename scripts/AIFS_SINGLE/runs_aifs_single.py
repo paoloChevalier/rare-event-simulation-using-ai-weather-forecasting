@@ -1,6 +1,4 @@
 ##imports
-import datetime
-from collections import defaultdict
 import os
 
 os.environ["PYTHONHASHSEED"] = "14012003"
@@ -10,7 +8,6 @@ import glob
 import argparse
 
 from anemoi.inference.runners.simple import SimpleRunner
-from anemoi.inference.outputs.printer import print_state
 
 import torch
 import numpy as np
