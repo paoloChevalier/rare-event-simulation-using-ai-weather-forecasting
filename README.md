@@ -59,7 +59,7 @@ The repository includes several scripts for downloading inputs, running AIFS exp
 ## Data
 
 The data needed is from IPSL-CM6A-LR and ERA5. Both available online [here](https://esgf-node.ipsl.upmc.fr/search/cmip6-ipsl/) and [here](https://cds.climate.copernicus.eu/).
-The IFS and AIFS-Ensemble(Diffusion) forecasts are available online [here](https://cds.climate.copernicus.eu/) or using [Herbie](https://github.com/blaylockbk/Herbie).
+The IFS and AIFS-Ensemble forecasts are available online [here](https://cds.climate.copernicus.eu/) or using [Herbie](https://github.com/blaylockbk/Herbie).
 The AIFS-Deterministic version is available online from [HuggingFace](https://huggingface.co/ecmwf/aifs-single-1.0).
 The AIFS-Ensemble(CRPS) version is available online from [HuggingFace](https://huggingface.co/ecmwf/aifs-ens-1.0).
 
