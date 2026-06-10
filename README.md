@@ -20,6 +20,41 @@ All the remaining scripts were run on the Jean-Zay supercomputer and need atleas
   - ensemble_chaos_tools.py : Various tools for analyzing chaos and dynamical/thermodynamical properties of forecasts, plot of trajectories, plot of logdists and computation of lyapunov exponents, plot of forecast maps. Create a `EnsembleChaos` object to call the different tools.
 
 ### Scripts
+The repository includes several scripts for downloading inputs, running AIFS experiments, and post-processing results. All scripts are organized by experiment type and include example usage files.
+
+#### Data Download & Preprocessing
+
+- **`scripts/DL_INPUTS_ENS/`** - Download and preprocess inputs for AIFS Ensemble
+  - `aifs_inputs_dl+preprocess.py`: Main script for downloading and preprocessing ensemble forecast inputs
+  - `example_use.sh`: Example shell script demonstrating usage
+
+#### First Experiments with AIFS Single/Deterministic
+
+- **`scripts/FIRST_EXPERIMENTS_AIFS_SINGLE/`** - Initial experiments using AIFS-Deterministic model
+  - `runs_aifs_single.py`: Main script to run AIFS-Deterministic forecasts
+  - `example_use.sh`: Example usage
+  - **`DL_INPUTS_SINGLE/`** - Input preparation with perturbations
+    - `aifs_inputs_dl+preprocess+perturbation.py`: Download, preprocess, and apply perturbations to initial conditions
+    - `aifs_inputs_dl+preprocess+perturbation-EDA.py`: Variant for Ensemble Data Assimilation (EDA)
+    - `example_use.sh` and `example_use_EDA.sh`: Example usage files
+  - **`POSTPROCESS/`** - Post-processing results
+    - `aifs_single_outputs_process.py`: Process AIFS-Deterministic outputs
+
+#### Simple Boosting Algorithm
+
+- **`scripts/SIMPLE_BOOSTING/`** - Rare event simulation using simple boosting
+  - `run_aifs_crps_simple_boosting.py`: Main script to run simple boosting algorithm with AIFS-CRPS
+  - `example_use.sh`: Example usage
+  - **`POSTPROCESS/`** - Post-processing results
+    - `simple_boosting_postprocess.py`: Process simple boosting results
+
+#### Infinite Boosting Algorithm
+
+- **`scripts/INFINITE_BOOSTING/`** - Rare event simulation using infinite boosting
+  - `run_aifs_crps_infinite_boosting.py`: Main script to run infinite boosting algorithm with AIFS-CRPS
+  - `example_use.sh`: Example usage
+  - **`POSTPROCESS/`** - Post-processing results
+    - `infinite_boosting_postprocess.py`: Process infinite boosting results
 
 ## Data
 
