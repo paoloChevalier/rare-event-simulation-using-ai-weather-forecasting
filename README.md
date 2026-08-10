@@ -17,7 +17,7 @@ All the remaining scripts were run on the Jean-Zay supercomputer and need at lea
 ### Notebooks
 - Notebooks/ANNEX-lyapunov_exponents_ensemble_forecasts_ecmwf.ipynb: study of Lyapunov exponents in IFS and AIFS to assess chaotic behaviour.
 - Notebooks/MAY_2026_HEATWAVE.ipynb: focused analysis of a May 2026 heatwave case study and diagnostics.
-- Notebooks/ITERATIVE_BOOSTING_AIFS-Ens.ipynb: iterative boosting experiments using AIFS ensembles.
+- Notebooks/ITERATIVE_BOOSTING_AIFS-Ens.ipynb: iterative boosting experiments using AIFS ensembles. contains functions to compute probabilities and reconstruct trajectories.
 - Notebooks/ITERATIVE_BOOSTING_OU.ipynb: iterative-boosting experiments on Ornstein–Uhlenbeck / toy dynamical systems.
 - Notebooks/ANNEX-ensemble_forecasts_outputs_aifs_crps_N320.ipynb: annex with outputs and diagnostics for AIFS-CRPS ensemble on N320 grid.
 - Notebooks/ANNEX-ensemble_forecasts_outputs_aifs_single.ipynb: annex with outputs and diagnostics for AIFS-Deterministic runs.
@@ -37,15 +37,19 @@ The repository includes several scripts for downloading inputs, running AIFS exp
   - POSTPROCESS/aifs_single_outputs_process.py — convert per-member .pkl outputs to regridded NetCDF and other postprocessing utilities.
 
 - scripts/SIMPLE_BOOSTING/
-  - run_aifs_crps_simple_boosting.py — run the simple boosting rare-event algorithm using AIFS-CRPS.
+  - run_aifs_crps_simple_boosting.py — run the simple boosting rare-event algorithm using AIFS-Ens.
+  - example_use.sh — config
+  - POSTPROCESS/simple_boosting_postprocess.py — postprocessing script; pkl to netcdf per variable.
+  - POSTPROCESS/example_use.sh — example config
 
 - scripts/ITERATIVE BOOSTING/
   - run_iterative_boosting.py — iterative boosting script for AIFS-Ens.
-  - iterative_boosting_JJA.sh — example SLURM batch script for a JJA campaign.
-  - POSTPROCESS/run_postprocess.sh — example postprocessing SLURM script invoking iterative_boosting_postprocess.py.
+  - iterative_boosting_JJA.sh — example config for JJA
+  - POSTPROCESS/iterative_boosting_postprocess.py — postprocessing script; pkl to netcdf per variable per phase.
+  - POSTPROCESS/run_postprocess.sh — example config
 
 ## Data
-
+- Many notebooks and scripts expect local datasets and pickles from experiments.
 - ERA5 (available via Copernicus CDS): https://cds.climate.copernicus.eu/
 - IFS and AIFS forecasts: ECMWF CDS or via Herbie: https://github.com/blaylockbk/Herbie
 - AIFS checkpoints (Hugging Face):
