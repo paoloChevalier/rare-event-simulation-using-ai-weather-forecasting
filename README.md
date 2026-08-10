@@ -5,12 +5,12 @@ This repository contains the code, notebooks and scripts supporting my Master's 
 This project has two main parts:
 
 - **Physical consistency and chaos analysis:** evaluates AIFS (and IFS) for physical consistency and chaotic properties.
-- **Rare-event algorithms:** implements and tests rare-event simulation methods (simple and iterative boosting) using AIFS forecasts.
+- **Rare-event algorithms:** implements and tests rare-event simulation methods (simple and iterative boosting, described in the `.pdf`) using AIFS forecasts.
 
 ## Installation
 
 The notebooks and input/postprocess scripts for the preliminary part and results were run using `pangeo_2025`.
-All the remaining scripts were run on the Jean-Zay supercomputer and need at least a NVIDIA 1100 GPU with `flash_attention` support.
+All the remaining scripts were run on the Jean-Zay supercomputer and need at least a NVIDIA A100 GPU with `flash_attention` support.
 
 ## Usage
 
