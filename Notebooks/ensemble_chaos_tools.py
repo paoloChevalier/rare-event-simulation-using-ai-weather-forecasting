@@ -2,17 +2,74 @@ import numpy as np
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 import matplotlib.animation as animation
 from IPython.display import HTML
 from scipy.optimize import curve_fit
 
-def check_chaos(tss, title, era=None, time_of_day=[0, 6, 12, 18],save=None):
-    tss = tss.isel(step=tss.valid_time.dt.hour.isin(time_of_day))
-    times = tss.step.values / np.timedelta64(1, "D")
+
+def setup_latex_style(base_size=10):
+    rcParams.update(
+        {
+            "font.size": base_size,
+            "axes.titlesize": base_size,
+            "axes.labelsize": base_size - 1,
+            "xtick.labelsize": base_size - 1,
+            "ytick.labelsize": base_size - 1,
+            "legend.fontsize": base_size - 1,
+            "font.family": "serif",
+            "font.serif": ["cmr10"],
+            "mathtext.fontset": "cm",
+            "axes.formatter.use_mathtext": True,
+            "contour.linewidth": 0.6,
+        }
+    )
+
+
+def get_figsize(width_pt, fraction=1.0, height_factor=0.75):
+    inches_per_pt = 1.0 / 72.27
+    fig_width_in = width_pt * fraction * inches_per_pt
+    fig_height_in = fig_width_in * height_factor
+    return (fig_width_in, fig_height_in)
+
+
+setup_latex_style()
+
+WIDTH_PAPER = 372.0
+WIDTH_INSA = 496.0
+
+
+def check_chaos(
+    tss, title, era=None, time_of_day=[0, 6, 12, 18], save=None, hline=None
+):
+    """Plot the trajectory of an ensemble forecast to evaluate chaotic spread.
+
+    Extracts the top 3 highest temperature ensemble members, highlights them, 
+    and shades the full ensemble spread alongside the ensemble mean. Can optionally 
+    overlay a reference dataset (like ERA5) or a horizontal threshold line.
+
+    Args:
+        tss: xarray Dataset or DataArray containing the ensemble timeseries.
+        title: String to use as the title of the plot.
+        era: Optional xarray DataArray containing reference data to plot. Defaults to None.
+        time_of_day: List of integers representing hours to filter the valid times. Defaults to [0, 6, 12, 18].
+        save: Optional string for the filename. If provided, the plot is saved as a PDF. Defaults to None.
+        hline: Optional float representing a specific threshold to plot as a horizontal dashed line. Defaults to None.
+
+    Returns:
+        None. Displays a matplotlib figure and optionally saves it to disk.
+    """
+    tss = tss.isel(step=tss.valid_time.dt.hour.isin(time_of_day).compute())
+    times = tss.valid_time.values
+
+    max_temps = tss.max(dim="step")
+    top = max_temps.sortby(max_temps, ascending=False).head(number=3)
+    top_numbers = top.number.values
+    shade = ["#7CFC00", "#32CD32", "#006400"]
 
     plt.style.use("seaborn-v0_8-whitegrid")
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(
+        figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+    )
 
     p_min = tss.min(dim="number")
     p_max = tss.max(dim="number")
@@ -22,7 +79,12 @@ def check_chaos(tss, title, era=None, time_of_day=[0, 6, 12, 18],save=None):
 
     for n in tss.number.values:
         ts = tss.sel(number=n)
-        ax.plot(times, ts, linewidth=0.5, color="black", alpha=0.3)
+        # ax.plot(times, ts, linewidth=0.5, color="black", alpha=0.3)
+        if n in top_numbers:
+            rank = list(top_numbers).index(n)
+            ax.plot(times, ts, linewidth=2, color=shade[rank], zorder=5)
+        else:
+            ax.plot(times, ts, linewidth=0.5, color="black", alpha=0.3)
     ax.plot(
         times,
         tss.mean("number"),
@@ -32,16 +94,21 @@ def check_chaos(tss, title, era=None, time_of_day=[0, 6, 12, 18],save=None):
         label="Ensemble Mean",
     )
     if era is not None:
-        era = era.isel(time=era.time.dt.hour.isin(time_of_day))
+        era = era.sel(valid_time=times)
         ax.plot(times, era, label="ERA5", linewidth=2, color="red")
-    ax.set_title(title,fontsize="x-large")
-    ax.set_ylabel(f"Temperature",fontsize="x-large")
-    ax.set_xlabel("Days since start",fontsize="x-large")
-    ax.legend(fontsize="x-large")
+    if hline is not None:
+        ax.axhline(y=hline, color="red", linestyle="--")
+    ax.set_title(title)
+    ax.set_ylabel(f"Temperature")
+    ax.set_xlabel("Days since start")
+    ax.legend()
+    ax.tick_params(axis="both", which="major")
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
     plt.tight_layout()
     if save is not None:
-        plt.savefig(f"chaos_plots/{save}.pdf",bbox_inches="tight")
+        plt.savefig(f"chaos_plots/{save}.pdf", bbox_inches="tight")
     plt.show()
+
 
 def fix_lat_lon(data):
     """Tidy latitude and longitude data.
@@ -94,6 +161,17 @@ def find_linear_part(x, y):
 
 
 class EnsembleChaos:
+    """A suite of tools for analyzing the chaotic spread and predictability of ensemble forecasts.
+
+    Provides methods to compare a control run against a perturbed ensemble, calculate 
+    Lyapunov exponents, estimate error growth rates, and visualize the spatial 
+    and temporal evolution of the forecast spread.
+
+    Args:
+        control: xarray Dataset representing the deterministic or control run.
+        perturbed: xarray Dataset representing the perturbed ensemble members.
+        var_name: String specifying the meteorological variable to analyze. Defaults to "t2m".
+    """
     def __init__(self, control, perturbed, var_name="t2m"):
         self.control = fix_lat_lon(control).sortby("step")
         self.perturbed = fix_lat_lon(perturbed).sortby("step")
@@ -131,7 +209,9 @@ class EnsembleChaos:
         times = temp_control.valid_time.values
 
         plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+        )
         # fill between max and min of ens members
         ax.fill_between(
             times,
@@ -221,7 +301,9 @@ class EnsembleChaos:
         times = temp_control.valid_time.values
 
         plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+        )
 
         # fill between max and min of ens members
         ax.fill_between(
@@ -327,7 +409,9 @@ class EnsembleChaos:
 
         # plot and print
         plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+        )
         ax.set_ylabel("$log(RMSE)$")
         ax.set_xlabel("Day")
 
@@ -369,7 +453,9 @@ class EnsembleChaos:
         plt.show()
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
 
-    def growth_rate_pairwise_bootstrap(self, lat, lon, times=[0, 6, 12, 18],N=100, save=None, crps=False):
+    def growth_rate_pairwise_bootstrap(
+        self, lat, lon, times=[0, 6, 12, 18], N=100, save=None, crps=False
+    ):
         """Estimate the upper-bound predictability limit and growth rate (alpha) over a spatial region.
 
         Unlike lyapunov_over_area_pairwise which uses a linear fit on log-RMSE,
@@ -389,10 +475,10 @@ class EnsembleChaos:
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
         time_mask_perturbed = self.perturbed.valid_time.dt.hour.isin(times)
 
-        #the first input is to same if using crps
+        # the first input is to same if using crps
         if crps:
-            time_mask_control[0]=False
-            time_mask_perturbed[0]=False
+            time_mask_control[0] = False
+            time_mask_perturbed[0] = False
 
         # select only the area on the point we're interested in and times we want
         temp_control = self.control.sel(latitude=lat, longitude=lon).sel(
@@ -407,25 +493,36 @@ class EnsembleChaos:
             xr.concat(
                 [temp_control.expand_dims("number"), temp_perturbed], dim="number"
             )
-            .stack(space=["latitude", "longitude"]
-                  ).transpose("step", "number", "space")
+            .stack(space=["latitude", "longitude"])
+            .transpose("step", "number", "space")
         )
 
         # Subtract the ensemble mean to center the data around 0 (trying to avoid catastrophic annulation)
         data = data - data.mean(dim="number", skipna=True)
-        
+
         # weights
         weights = np.cos(np.deg2rad(data.latitude.values))
         weights_norm = weights / np.mean(weights)
 
         # compute RMSE pairwise relatively fast
-        v = data.values #extract numpy array
-        sq_mean = np.mean((v**2) * weights_norm, axis=-1) #compute the squared mean of the data for an ensemble and step [step x number]
+        v = data.values  # extract numpy array
+        sq_mean = np.mean(
+            (v**2) * weights_norm, axis=-1
+        )  # compute the squared mean of the data for an ensemble and step [step x number]
         # dark magic for the compute of the cross term when expanding the square, first apply the weights on one of the terms then
         # perform a batched matrix multiplication (@) to calculate the dot product of every ensemble pair (2AB) acrros all time steps
-        #the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
-        rmse = np.sqrt(np.maximum((sq_mean[:, :, None] + sq_mean[:, None, :] - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]).transpose(1, 2, 0), 0))
-        #max in case matmul gives smth <0, happens sometimes when numbers are very small
+        # the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
+        rmse = np.sqrt(
+            np.maximum(
+                (
+                    sq_mean[:, :, None]
+                    + sq_mean[:, None, :]
+                    - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]
+                ).transpose(1, 2, 0),
+                0,
+            )
+        )
+        # max in case matmul gives smth <0, happens sometimes when numbers are very small
 
         # Pairwise extractions and then mean over all ensemble pairs
         pairwise_rmse = rmse[np.triu_indices(rmse.shape[0], k=1)]
@@ -440,8 +537,8 @@ class EnsembleChaos:
         ).astype(float) / 24.0
 
         if crps:
-            time_since_start=time_since_start+0.25
-        
+            time_since_start = time_since_start + 0.25
+
         # fit lorenz model
         # solution of lorenz model for growth
         E0 = mean_rmse[0]
@@ -464,7 +561,7 @@ class EnsembleChaos:
         alpha = np.round(popt[0], 3)
         E_inf = np.round(popt[1], 3)
 
-        #bootstrap (the first fit was done to warmup the bootstraps)
+        # bootstrap (the first fit was done to warmup the bootstraps)
 
         num_pairs = pairwise_rmse.shape[0]
         bootstrap_alphas, bootstrap_E_infs = [], []
@@ -474,13 +571,13 @@ class EnsembleChaos:
             bootstrap_mean_rmse = np.mean(pairwise_rmse[idx], axis=0)
 
             popt_bootstrap, _ = curve_fit(
-                    logistic_solution,
-                    time_since_start,
-                    bootstrap_mean_rmse,
-                    p0=[alpha, E_inf], 
-                    bounds=([0.0, 0.0], [1, max_E * 5.0]),
-                    maxfev=2000 
-                )
+                logistic_solution,
+                time_since_start,
+                bootstrap_mean_rmse,
+                p0=[alpha, E_inf],
+                bounds=([0.0, 0.0], [1, max_E * 5.0]),
+                maxfev=2000,
+            )
             bootstrap_alphas.append(popt_bootstrap[0])
             bootstrap_E_infs.append(popt_bootstrap[1])
 
@@ -491,12 +588,14 @@ class EnsembleChaos:
         E_ci_plusminus = 1.96 * np.std(bootstrap_E_infs)
         E_inf_lower = np.round(E_inf - E_ci_plusminus, 3)
         E_inf_upper = np.round(E_inf + E_ci_plusminus, 3)
-        
+
         # plot and print
         plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(12, 6))
-        ax.set_ylabel("$log(RMSE)$",fontsize="x-large")
-        ax.set_xlabel("Day",fontsize="x-large")
+        fig, ax = plt.subplots(
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+        )
+        ax.set_ylabel("$log(RMSE)$")
+        ax.set_xlabel("Day")
 
         for n in range(logdist.shape[0]):
             label = "Pairwise Differences" if n == 0 else None
@@ -534,19 +633,23 @@ class EnsembleChaos:
             label=f"Fit (α $\in$ [{alpha_lower},{alpha_upper}])",
         )
 
-        ax.set_title("Log Differences (Pairwise)",fontsize="x-large")
-        ax.legend(fontsize="x-large")
+        # ax.set_title("Log Differences (Pairwise)",)
+        ax.legend(loc="lower right")
         plt.tight_layout()
         if save is not None:
-            plt.savefig(f"lyap_plots/{save}.png",dpi=300)
+            plt.savefig(f"lyap_plots/{save}.png", dpi=300)
         plt.show()
 
-        print(f"Estimated Growth Rate (α): {alpha} [95% CI: {alpha_lower}, {alpha_upper}] days^-1 | "
-              f"Saturation Error (E_inf): {E_inf} [95% CI: {E_inf_lower}, {E_inf_upper}]")
+        print(
+            f"Estimated Growth Rate (α): {alpha} [95% CI: {alpha_lower}, {alpha_upper}] days^-1 | "
+            f"Saturation Error (E_inf): {E_inf} [95% CI: {E_inf_lower}, {E_inf_upper}]"
+        )
 
-        #return alpha, E_inf, (alpha_lower, alpha_upper), (E_inf_lower, E_inf_upper)
+        # return alpha, E_inf, (alpha_lower, alpha_upper), (E_inf_lower, E_inf_upper)
 
-    def lyapunov_over_area_pairwise_bootstrap(self, lat, lon, times=[0, 6, 12, 18],N=100,save=None,crps=False):
+    def lyapunov_over_area_pairwise_bootstrap(
+        self, lat, lon, times=[0, 6, 12, 18], N=100, save=None, crps=False
+    ):
         """Estimate the Lyapunov exponent using all pairwise differences over a spatial region.
 
         Unlike lyapunov_over_area, which compares each ensemble member to the control,
@@ -568,10 +671,10 @@ class EnsembleChaos:
         time_mask_control = self.control.valid_time.dt.hour.isin(times)
         time_mask_perturbed = self.perturbed.valid_time.dt.hour.isin(times)
 
-        #the first input is to same if using crps
+        # the first input is to same if using crps
         if crps:
-            time_mask_control[0]=False
-            time_mask_perturbed[0]=False
+            time_mask_control[0] = False
+            time_mask_perturbed[0] = False
 
         # select only the area on the point we're interested in and times we want
         temp_control = self.control.sel(latitude=lat, longitude=lon).sel(
@@ -586,24 +689,35 @@ class EnsembleChaos:
             xr.concat(
                 [temp_control.expand_dims("number"), temp_perturbed], dim="number"
             )
-            .stack(space=["latitude", "longitude"]
-                  ).transpose("step", "number", "space")
+            .stack(space=["latitude", "longitude"])
+            .transpose("step", "number", "space")
         )
-        
+
         # Subtract the ensemble mean to center the data around 0 (trying to avoid catastrophic annulation)
         data = data - data.mean(dim="number", skipna=True)
-        
+
         # weights
         weights = np.cos(np.deg2rad(data.latitude.values))
         weights_norm = weights / np.mean(weights)
 
         # compute RMSE pairwise relatively fast
-        v = data.values #extract numpy array
-        sq_mean = np.mean((v**2) * weights_norm, axis=-1) #compute the squared mean of the data for an ensemble and step [step x number]
+        v = data.values  # extract numpy array
+        sq_mean = np.mean(
+            (v**2) * weights_norm, axis=-1
+        )  # compute the squared mean of the data for an ensemble and step [step x number]
         # dark magic for the compute of the cross term when expanding the square, first apply the weights on one of the terms then
         # perform a batched matrix multiplication (@) to calculate the dot product of every ensemble pair (2AB) acrros all time steps
-        #the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
-        rmse = np.sqrt(np.maximum((sq_mean[:, :, None] + sq_mean[:, None, :] - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]).transpose(1, 2, 0), 0))
+        # the final .transpose(1, 2, 0) transposes the result from (step, number, number) to (number, number, step) so that tri_indices works fine
+        rmse = np.sqrt(
+            np.maximum(
+                (
+                    sq_mean[:, :, None]
+                    + sq_mean[:, None, :]
+                    - 2 * ((v * weights_norm) @ v.transpose(0, 2, 1)) / v.shape[-1]
+                ).transpose(1, 2, 0),
+                0,
+            )
+        )
 
         # Pairwise extractions and then mean over all ensemble pairs
         pairwise_rmse = rmse[np.triu_indices(rmse.shape[0], k=1)]
@@ -618,10 +732,12 @@ class EnsembleChaos:
         ).astype(float) / 24.0
 
         if crps:
-            time_since_start=time_since_start+0.25
+            time_since_start = time_since_start + 0.25
 
         plt.style.use("seaborn-v0_8-whitegrid")
-        fig, ax = plt.subplots(figsize=(8, 4))
+        fig, ax = plt.subplots(
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.5)
+        )
         ax.set_ylabel("$log(RMSE)$")
         ax.set_xlabel("Day")
 
@@ -647,7 +763,7 @@ class EnsembleChaos:
         )
 
         # compute the lyapunov exponent
-        
+
         linear_indices = find_linear_part(time_since_start, mean_logdist)
         slope, intercept = np.polyfit(
             time_since_start[linear_indices], mean_logdist[linear_indices], 1
@@ -664,7 +780,9 @@ class EnsembleChaos:
             bootstrap_mean_logdist = np.mean(logdist[idx], axis=0)
 
             slope_boot, _ = np.polyfit(
-                time_since_start[linear_indices], bootstrap_mean_logdist[linear_indices], 1
+                time_since_start[linear_indices],
+                bootstrap_mean_logdist[linear_indices],
+                1,
             )
             bootstrap_lyaps.append(slope_boot)
 
@@ -689,11 +807,12 @@ class EnsembleChaos:
         ax.legend()
         plt.tight_layout()
         if save is not None:
-            plt.savefig(f"lyap_plots/{save}_lyapunov_basic.png",dpi=300)
+            plt.savefig(f"lyap_plots/{save}_lyapunov_basic.png", dpi=300)
         plt.show()
 
         print(f"Estimated Lyapunov Exponent (λ): {lyapunov_exponent} days^-1")
-#        return lyapunov_exponent
+
+    #        return lyapunov_exponent
 
     def plot_nice_looking_animation(
         self, lat_bnds, lon_bnds, member=0, filename=None, speed=300, cmap="viridis"
@@ -730,7 +849,8 @@ class EnsembleChaos:
         )
 
         fig, ax = plt.subplots(
-            figsize=(10, 8), subplot_kw={"projection": ccrs.PlateCarree()}
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.8),
+            subplot_kw={"projection": ccrs.PlateCarree()},
         )
 
         fig.tight_layout()
@@ -757,7 +877,7 @@ class EnsembleChaos:
         )
 
         if filename:
-            ani.save(filename, writer="pillow",dpi=300)
+            ani.save(filename, writer="pillow", dpi=300)
             plt.close(fig)
             return None
         else:
@@ -804,7 +924,7 @@ class EnsembleChaos:
         center_lat = (lat_bnds.start + lat_bnds.stop) / 2
 
         fig, ax = plt.subplots(
-            figsize=(10, 8),
+            figsize=get_figsize(WIDTH_INSA, fraction=1.0, height_factor=0.8),
             subplot_kw={"projection": ccrs.Orthographic(center_lon, center_lat)},
         )
 
@@ -846,4 +966,3 @@ class EnsembleChaos:
         else:
             plt.close(fig)
             return HTML(ani.to_jshtml())
-
