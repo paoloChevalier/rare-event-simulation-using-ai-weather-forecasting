@@ -48,6 +48,15 @@ The repository includes several scripts for downloading inputs, running AIFS exp
   - POSTPROCESS/iterative_boosting_postprocess.py — postprocessing script; pkl to netcdf per variable per phase.
   - POSTPROCESS/run_postprocess.sh — example config
 
+### Example workflow
+
++ Download inputs .pkl file with scripts/DL_INPUTS_ENS/* (set experiment name, date you want the forecast to initiate from and the path to where you want the input to go)
++ Run the algorithm of your choice: (set experiment name, which timestamps you want to save, which variables you want to save, paths for input and outputs, checkpoint and mask to save only a region of the globe and the amount of members)
+  - Simple boosting : run the script for each initial state (set lead_time and init_date, the script will find the .pkl by itself)
+  - Iterative boosting : run the script once (set all initial dates and parameters (f_j, t_j etc) as in the example .sh)
++ Run the corresponding postprocessing script (set the right paths and parameters, experiment name etc, use the examples .sh)
++ Enjoy your .nc files, examples of analysis (how to open files, how to plot, compute probabilities) are given in the two notebooks MAY_2026_HEATWAVE.ipynb and ITERATIVE_BOOSTING_AIFS-Ens.ipynb.
+
 ## Data
 - Many notebooks and scripts expect local datasets and pickles from experiments.
 - ERA5 (available via Copernicus CDS): https://cds.climate.copernicus.eu/
