@@ -1,68 +1,57 @@
 # rare-event-simulation-using-ai-weather-forecasting
 
-This repository contains the work from my Master’s thesis at LSCE (CNRS), supervised by Pascal Yiou and Soulivanh Thao. The project evaluates the viability of AIFS from ECMWF for climate extremes. Exploring whether AI-based weather forecasting models (AIFS) can replace traditional dynamical models for simulating extreme climate events. 
+This repository contains the code, notebooks and scripts supporting my Master's thesis at LSCE (CNRS), supervised by Pascal Yiou and Soulivanh Thao. The thesis evaluates the viability of ECMWF's AI-Enhanced Forecast Systems (AIFS) for studying climate extremes and for performing rare-event simulation algorithms that leverage AI-based forecasts.
 
-This project 
+This project has two main parts:
 
-- The first part focuses on the models physical consistency and chaotic properties, assessing the ability of AIFS-Deterministic to be physically consistent and chaotic, looking at energy transfers and using ensemble boosting (perturbed initial conditions) to evaluate Lyapunov exponents and times.
-- The second part will aim at performing rare event algorithms using AIFS.
+- Physical consistency and chaos analysis: evaluates AIFS (and IFS) for physical consistency and chaotic properties.
+- Rare-event algorithms: implements and tests rare-event simulation methods (iterative boosting and simple boosting variants) using AIFS forecasts.
 
 ## Installation
 
-The notebooks for the preliminary part and results were run using pangeo_2025.
-All the remaining scripts were run on the Jean-Zay supercomputer and need atleast a NVIDIA H100 GPU with flash_attention support.
+The notebooks and input/postprocess scripts for the preliminary part and results were run using pangeo_2025.
+All the remaining scripts were run on the Jean-Zay supercomputer and need at least a NVIDIA 1100 GPU with flash_attention support.
 
 ## Usage
 
 ### Notebooks
-
-  - lyapunov_exponents_ensemble_forecasts_ecmwf.ipynb : Preliminary work using ECMWF's IFS and AIFS ensemble weather forecast to study the chaotic behaviour of these systems.
-  - ensemble_chaos_tools.py : Various tools for analyzing chaos and dynamical/thermodynamical properties of forecasts, plot of trajectories, plot of logdists and computation of lyapunov exponents, plot of forecast maps. Create a `EnsembleChaos` object to call the different tools.
+- Notebooks/ANNEX-lyapunov_exponents_ensemble_forecasts_ecmwf.ipynb: study of Lyapunov exponents in IFS and AIFS to assess chaotic behaviour.
+- Notebooks/MAY_2026_HEATWAVE.ipynb: focused analysis of a May 2026 heatwave case study and diagnostics.
+- Notebooks/ITERATIVE_BOOSTING_AIFS-Ens.ipynb: iterative boosting experiments using AIFS ensembles.
+- Notebooks/ITERATIVE_BOOSTING_OU.ipynb: iterative-boosting experiments on Ornstein–Uhlenbeck / toy dynamical systems.
+- Notebooks/ANNEX-ensemble_forecasts_outputs_aifs_crps_N320.ipynb: annex with outputs and diagnostics for AIFS-CRPS ensemble on N320 grid.
+- Notebooks/ANNEX-ensemble_forecasts_outputs_aifs_single.ipynb: annex with outputs and diagnostics for AIFS-Deterministic runs.
+- Notebooks/LORENZ63.ipynb: small Lorenz63 experiments and examples used for method illustration.
+- Notebooks/ensemble_chaos_tools.py: helper module (used by notebooks) with plotting and chaos diagnostic utilities.
 
 ### Scripts
 The repository includes several scripts for downloading inputs, running AIFS experiments, and post-processing results. All scripts are organized by experiment type and include example usage files.
 
-#### Data Download & Preprocessing
+- scripts/DL_INPUTS_ENS/
+  - aifs_inputs_dl+preprocess.py — download and preprocess ERA5 inputs.
+  - example_use.sh — example config.
 
-- **`scripts/DL_INPUTS_ENS/`** - Download and preprocess inputs for AIFS Ensemble
-  - `aifs_inputs_dl+preprocess.py`: Main script for downloading and preprocessing ensemble forecast inputs
-  - `example_use.sh`: Example shell script demonstrating usage
+- scripts/FIRST_EXPERIMENTS_AIFS_SINGLE/
+  - runs_aifs_single.py — run AIFS-Deterministic forecasts for prepared input states.
+  - DL_INPUTS_SINGLE/aifs_inputs_dl+preprocess+perturbation.py — download + preprocess + add perturbations (single/deterministic input prep).
+  - POSTPROCESS/aifs_single_outputs_process.py — convert per-member .pkl outputs to regridded NetCDF and other postprocessing utilities.
 
-#### First Experiments with AIFS Single/Deterministic
+- scripts/SIMPLE_BOOSTING/
+  - run_aifs_crps_simple_boosting.py — run the simple boosting rare-event algorithm using AIFS-CRPS.
 
-- **`scripts/FIRST_EXPERIMENTS_AIFS_SINGLE/`** - Initial experiments using AIFS-Deterministic model
-  - `runs_aifs_single.py`: Main script to run AIFS-Deterministic forecasts
-  - `example_use.sh`: Example usage
-  - **`DL_INPUTS_SINGLE/`** - Input preparation with perturbations
-    - `aifs_inputs_dl+preprocess+perturbation.py`: Download, preprocess, and apply perturbations to initial conditions
-    - `aifs_inputs_dl+preprocess+perturbation-EDA.py`: Variant for Ensemble Data Assimilation (EDA)
-    - `example_use.sh` and `example_use_EDA.sh`: Example usage files
-  - **`POSTPROCESS/`** - Post-processing results
-    - `aifs_single_outputs_process.py`: Process AIFS-Deterministic outputs
-
-#### Simple Boosting Algorithm
-
-- **`scripts/SIMPLE_BOOSTING/`** - Rare event simulation using simple boosting
-  - `run_aifs_crps_simple_boosting.py`: Main script to run simple boosting algorithm with AIFS-CRPS
-  - `example_use.sh`: Example usage
-  - **`POSTPROCESS/`** - Post-processing results
-    - `simple_boosting_postprocess.py`: Process simple boosting results
-
-#### Infinite Boosting Algorithm
-
-- **`scripts/INFINITE_BOOSTING/`** - Rare event simulation using infinite boosting
-  - `run_aifs_crps_infinite_boosting.py`: Main script to run infinite boosting algorithm with AIFS-CRPS
-  - `example_use.sh`: Example usage
-  - **`POSTPROCESS/`** - Post-processing results
-    - `infinite_boosting_postprocess.py`: Process infinite boosting results
+- scripts/ITERATIVE BOOSTING/
+  - run_iterative_boosting.py — iterative boosting script for AIFS-Ens.
+  - iterative_boosting_JJA.sh — example SLURM batch script for a JJA campaign.
+  - POSTPROCESS/run_postprocess.sh — example postprocessing SLURM script invoking iterative_boosting_postprocess.py.
 
 ## Data
 
-The data needed is from IPSL-CM6A-LR and ERA5. Both available online [here](https://esgf-node.ipsl.upmc.fr/search/cmip6-ipsl/) and [here](https://cds.climate.copernicus.eu/).
-The IFS and AIFS-Ensemble forecasts are available online [here](https://cds.climate.copernicus.eu/) or using [Herbie](https://github.com/blaylockbk/Herbie).
-The AIFS-Deterministic version is available online from [HuggingFace](https://huggingface.co/ecmwf/aifs-single-1.0).
-The AIFS-Ensemble(CRPS) version is available online from [HuggingFace](https://huggingface.co/ecmwf/aifs-ens-1.0).
-
+- ERA5 (available via Copernicus CDS): https://cds.climate.copernicus.eu/
+- IFS and AIFS forecasts: ECMWF CDS or via Herbie: https://github.com/blaylockbk/Herbie
+- AIFS checkpoints (Hugging Face):
+  - AIFS-Deterministic: https://huggingface.co/ecmwf/aifs-single-1.0
+  - AIFS-Ensemble (CRPS): https://huggingface.co/ecmwf/aifs-ens-1.0
+    
 ## Acknowledgements
 
 This project was provided with computer and storage resources by GENCI at
