@@ -4,8 +4,8 @@ This repository contains the code, notebooks and scripts supporting my Master's 
 
 This project has two main parts:
 
-- **Physical consistency and chaos analysis:** evaluates AIFS (and IFS) for physical consistency and chaotic properties.
-- **Rare-event algorithms:** implements and tests rare-event simulation methods (simple and iterative boosting, described in `MASTERS_THESIS.pdf`) using AIFS forecasts.
+- **Chaos analysis:** evaluates AIFS (and IFS) for chaotic properties.
+- **Rare-event algorithms:** implements and tests rare-event simulation methods (simple and iterative boosting, described in the manuscript using AIFS forecasts.
 
 ## Installation
 
